@@ -1,0 +1,19 @@
+[package]
+name = "hah"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "hah"
+path = "src/main.rs"
+
+[dependencies]
+hah-core = { path = "../hah-core" }
+hah-dsl = { path = "../hah-dsl" }
+hah-checks = { path = "../hah-checks" }
+hah-utils = { path = "../hah-utils" }
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
