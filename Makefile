@@ -1,44 +1,48 @@
-.PHONY: all setup fmt fmt-check lint test audit check doc-dependencies
+.PHONY: all setup fmt fmt-check lint test audit coverage coverage-ci metrics check doc-dependencies
+
+# Configuration for quality gates
+COVERAGE_MIN_THRESHOLD ?= 95
+METRIC_MAX_COMPLEXITY  ?= 15
+METRIC_MAX_LENGTH      ?= 60
 
 all: check
 
-## Install required Cargo tools (run once)
+## Install required Cargo tools and pre-build the metrics analyser (run once)
 setup:
+	rustup component add llvm-tools-preview clippy rustfmt
 	cargo install cargo-audit
 	cargo install cargo-llvm-cov
-	rustup component add llvm-tools-preview
+	python3 --version
+	cargo build --manifest-path tools/hah-metrics/Cargo.toml --release
 
-## Auto-format all code
 fmt:
 	cargo fmt --all
 
-## Check formatting without modifying files (used in CI)
 fmt-check:
 	cargo fmt --all -- --check
 
-## Run Clippy; treat all warnings as errors
 lint:
 	cargo clippy --all-targets -- -D warnings
 
-## Run all tests
 test:
 	cargo test --all
 
-## Run security audit against RustSec advisory database
 audit:
 	cargo audit
 
-## Generate HTML coverage report (opens in target/llvm-cov/html/)
 coverage:
 	cargo llvm-cov --all-targets --workspace --html
 
-## Fail the build if line coverage drops below 95 %
 coverage-ci:
-	cargo llvm-cov --all-targets --workspace --fail-under-lines 95
+	cargo llvm-cov --all-targets --workspace --fail-under-lines $(COVERAGE_MIN_THRESHOLD)
 
-## Full quality gate: format-check + lint + test + audit + coverage
-check: fmt-check lint test audit coverage-ci
+metrics:
+	cargo run --manifest-path tools/hah-metrics/Cargo.toml --release --quiet -- \
+		--max-complexity $(METRIC_MAX_COMPLEXITY) \
+		--max-length $(METRIC_MAX_LENGTH)
 
-## Regenerate DEPENDENCIES.md from live cargo metadata
 doc-dependencies:
 	python3 tools/gen_deps_doc.py > DEPENDENCIES.md
+
+check: fmt-check lint test audit coverage-ci metrics
+

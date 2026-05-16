@@ -1,0 +1,20 @@
+[package]
+name = "hah-metrics"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[[bin]]
+name = "hah-metrics"
+path = "src/main.rs"
+
+[dependencies]
+# AST-accurate Rust parsing
+syn       = { version = "2", features = ["full", "visit"] }
+# span-locations enables Span::start()/end() for line/column info outside proc-macros
+proc-macro2 = { version = "1", features = ["span-locations"] }
+# CLI argument parsing
+clap      = { version = "4", features = ["derive"] }
+# Recursive directory walking
+walkdir   = "2"
