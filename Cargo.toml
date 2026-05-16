@@ -1,9 +1,10 @@
 [workspace]
 members = [
-    "crates/hah-utils",
+    "crates/hah",
     "crates/hah-core",
     "crates/hah-dsl",
     "crates/hah-checks",
+    "crates/hah-utils",
 ]
 resolver = "2"
 
