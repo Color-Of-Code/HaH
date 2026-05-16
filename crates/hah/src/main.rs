@@ -16,14 +16,9 @@ use hah_core::{
 /// was produced (the binary should exit with code 1 in that case).
 pub(crate) fn run_with_config(cli: Cli, config: Config, distro: DistroInfo) -> bool {
     match cli.command {
-        Command::Scan {
-            dry_run: _,
-            fix,
-            output,
-            check,
-        } => {
+        Command::Scan { output, check } => {
             let all = registry::all_checks(&config);
-            let ctx = Context::new(!fix, false, config, distro);
+            let ctx = Context::new(false, config, distro);
             let checks: Vec<_> = match &check {
                 Some(id) => all.into_iter().filter(|c| c.id() == id).collect(),
                 None => all,
@@ -144,15 +139,6 @@ mod tests {
                 "--output",
                 "yaml",
             ]),
-            Config::default(),
-            DistroInfo::default(),
-        );
-    }
-
-    #[test]
-    fn scan_fix_flag_does_not_panic() {
-        run_with_config(
-            parse(&["hah", "scan", "--check", "__no_such_check__", "--fix"]),
             Config::default(),
             DistroInfo::default(),
         );

@@ -64,15 +64,6 @@ fn scan_yaml_output_exits_cleanly() {
 }
 
 #[test]
-fn scan_dry_run_flag_exits_cleanly() {
-    let status = hah()
-        .args(["scan", "--check", "__nonexistent__", "--dry-run"])
-        .status()
-        .expect("failed to run hah");
-    assert_eq!(status.code(), Some(0));
-}
-
-#[test]
 fn invalid_subcommand_exits_nonzero() {
     let status = hah()
         .arg("not-a-real-subcommand")

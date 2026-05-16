@@ -15,14 +15,6 @@ pub struct Cli {
 pub enum Command {
     /// Run all enabled checks and report findings
     Scan {
-        /// Do not apply any remediations, only report (default behavior)
-        #[arg(long)]
-        dry_run: bool,
-
-        /// Apply safe remediations automatically (conflicts with --dry-run)
-        #[arg(long, conflicts_with = "dry_run")]
-        fix: bool,
-
         /// Output format
         #[arg(long, value_enum, default_value_t = OutputFormat::Terminal)]
         output: OutputFormat,
@@ -66,35 +58,9 @@ mod tests {
 
     #[test]
     fn parse_scan_defaults() {
-        if let Command::Scan {
-            dry_run,
-            fix,
-            output,
-            check,
-        } = parse(&["hah", "scan"]).command
-        {
-            assert!(!dry_run);
-            assert!(!fix);
+        if let Command::Scan { output, check } = parse(&["hah", "scan"]).command {
             assert!(matches!(output, OutputFormat::Terminal));
             assert!(check.is_none());
-        } else {
-            panic!("expected Scan");
-        }
-    }
-
-    #[test]
-    fn parse_scan_dry_run_flag() {
-        if let Command::Scan { dry_run, .. } = parse(&["hah", "scan", "--dry-run"]).command {
-            assert!(dry_run);
-        } else {
-            panic!("expected Scan");
-        }
-    }
-
-    #[test]
-    fn parse_scan_fix_flag() {
-        if let Command::Scan { fix, .. } = parse(&["hah", "scan", "--fix"]).command {
-            assert!(fix);
         } else {
             panic!("expected Scan");
         }

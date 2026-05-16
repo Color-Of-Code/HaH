@@ -11,8 +11,6 @@ pub enum Severity {
 pub struct Remediation {
     pub description: String,
     pub commands: Vec<String>,
-    /// Whether this remediation is considered safe to apply automatically.
-    pub safe: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,12 +29,11 @@ pub struct CheckResult {
 }
 
 impl Remediation {
-    /// Create a new remediation with an empty command list, marked unsafe by default.
+    /// Create a new remediation with an empty command list.
     pub fn new(description: impl Into<String>) -> Self {
         Self {
             description: description.into(),
             commands: Vec::new(),
-            safe: false,
         }
     }
 
@@ -44,11 +41,6 @@ impl Remediation {
     pub fn command(mut self, cmd: impl Into<String>) -> Self {
         self.commands.push(cmd.into());
         self
-    }
-
-    /// Mark this remediation as safe to apply automatically.
-    pub fn mark_safe(self) -> Self {
-        Self { safe: true, ..self }
     }
 }
 
@@ -100,11 +92,10 @@ mod tests {
     }
 
     #[test]
-    fn remediation_new_has_empty_commands_and_is_unsafe() {
+    fn remediation_new_has_empty_commands() {
         let r = Remediation::new("Fix it");
         assert_eq!(r.description, "Fix it");
         assert!(r.commands.is_empty());
-        assert!(!r.safe);
     }
 
     #[test]
@@ -117,12 +108,6 @@ mod tests {
     fn remediation_multiple_commands() {
         let r = Remediation::new("Fix").command("step1").command("step2");
         assert_eq!(r.commands, vec!["step1", "step2"]);
-    }
-
-    #[test]
-    fn remediation_mark_safe_sets_flag() {
-        let r = Remediation::new("Safe fix").mark_safe();
-        assert!(r.safe);
     }
 
     #[test]

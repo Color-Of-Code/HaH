@@ -60,7 +60,6 @@ impl Check for ResidualConfigCheck {
             remediation: Some(Remediation {
                 description: "Purge residual configurations.".into(),
                 commands: vec![format!("sudo dpkg --purge {list}")],
-                safe: false,
             }),
         })
     }
@@ -105,7 +104,6 @@ impl Check for DpkgStateCheck {
                     "sudo dpkg --configure -a".into(),
                     "sudo apt-get install -f".into(),
                 ],
-                safe: false,
             }),
         })
     }
@@ -152,7 +150,6 @@ impl Check for AutoremovableCheck {
             remediation: Some(Remediation {
                 description: "Remove unused auto-installed packages.".into(),
                 commands: vec!["sudo apt autoremove --purge".into()],
-                safe: false,
             }),
         })
     }
@@ -186,7 +183,6 @@ pub(crate) fn apt_key_finding(path: &Path) -> Option<Finding> {
                              --import /tmp/key.asc"
                         .into(),
                 ],
-                safe: true,
             }),
         })
     } else {
@@ -265,7 +261,6 @@ fn legacy_sources_finding(legacy_files: Vec<String>) -> Option<Finding> {
         remediation: Some(Remediation {
             description: "Convert to DEB822 format (one .sources file per repository).".into(),
             commands: vec!["# See: https://wiki.debian.org/SourcesList#DEB822_format".into()],
-            safe: true,
         }),
     })
 }
@@ -332,7 +327,6 @@ impl Check for UserDefinedPackageCheck {
                     remediation: Some(Remediation {
                         description: format!("Remove {}", entry.name),
                         commands: vec![format!("sudo apt remove --purge {}", entry.name)],
-                        safe: false,
                     }),
                 });
             }
@@ -371,7 +365,6 @@ mod tests {
 
     fn make_ctx(runner: Arc<dyn CommandRunner>, config: Config, distro_id: &str) -> Context {
         Context {
-            dry_run: false,
             verbose: false,
             config,
             distro: DistroInfo {

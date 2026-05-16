@@ -85,7 +85,6 @@ impl Check for BootSpaceCheck {
                 remediation: Some(Remediation {
                     description: "Remove unused kernels to free space.".into(),
                     commands: vec!["sudo apt autoremove --purge".into()],
-                    safe: false,
                 }),
             })
         } else {
@@ -143,7 +142,6 @@ impl Check for UnusedKernelsCheck {
             remediation: Some(Remediation {
                 description: "Remove unused kernels with apt.".into(),
                 commands: vec!["sudo apt autoremove --purge".into()],
-                safe: false,
             }),
         })
     }
@@ -205,7 +203,6 @@ impl Check for StaleKernelHeadersCheck {
                     .iter()
                     .map(|p| format!("sudo apt remove --purge {p}"))
                     .collect(),
-                safe: false,
             }),
         })
     }
@@ -255,7 +252,6 @@ impl Check for InitramfsCheck {
                         remediation: Some(Remediation {
                             description: "Regenerate initramfs images.".into(),
                             commands: vec!["sudo update-initramfs -u -k all".into()],
-                            safe: false,
                         }),
                     });
                 }
@@ -301,7 +297,6 @@ impl Check for DkmsStatusCheck {
                     remediation: Some(Remediation {
                         description: "Attempt DKMS rebuild.".into(),
                         commands: vec!["sudo dkms autoinstall".into()],
-                        safe: false,
                     }),
                 });
             }
@@ -367,7 +362,6 @@ pub(crate) fn classify_compression(content: &str) -> Option<Finding> {
                         .into(),
                     "sudo update-initramfs -u -k all".into(),
                 ],
-                safe: false,
             }),
         })
     } else {
@@ -405,7 +399,6 @@ mod tests {
 
     fn make_ctx(runner: Arc<dyn CommandRunner>, distro_id: &str) -> Context {
         Context {
-            dry_run: false,
             verbose: false,
             config: Config::default(),
             distro: DistroInfo {

@@ -81,7 +81,6 @@ impl Check for LegacyNtpCheck {
                     "sudo apt remove --purge ntp".into(),
                     "sudo apt install chrony && sudo systemctl enable --now chrony".into(),
                 ],
-                safe: false,
             }),
         })
     }
@@ -146,7 +145,6 @@ impl Check for NtpConflictCheck {
                     "sudo systemctl disable --now systemd-timesyncd".into(),
                     "# Then enable only one: sudo systemctl enable --now chrony".into(),
                 ],
-                safe: false,
             }),
         })
     }
@@ -199,7 +197,6 @@ impl Check for LegacyDhcpClientCheck {
             remediation: Some(Remediation {
                 description: "Remove the legacy ISC DHCP client.".into(),
                 commands: vec!["sudo apt remove --purge isc-dhcp-client".into()],
-                safe: false,
             }),
         })
     }
@@ -312,7 +309,6 @@ pub(crate) fn legacy_interfaces_finding(
                 "# Netplan reference: https://netplan.readthedocs.io/".into(),
                 "# After migration: sudo apt remove --purge ifupdown".into(),
             ],
-            safe: true,
         }),
     })
 }
@@ -377,7 +373,6 @@ impl Check for ResolvedConfigCheck {
                 commands: vec![
                     "sudo ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf".into(),
                 ],
-                safe: false,
             }),
         })
     }
@@ -429,7 +424,6 @@ mod tests {
 
     fn make_ctx(runner: Arc<dyn CommandRunner>, distro_id: &str) -> Context {
         Context {
-            dry_run: false,
             verbose: false,
             config: Config::default(),
             distro: DistroInfo {

@@ -19,7 +19,6 @@ fn disabled_revision_finding(name: &str, rev: &str) -> Finding {
         remediation: Some(Remediation {
             description: format!("Remove disabled revision {rev} of {name}."),
             commands: vec![format!("sudo snap remove {name} --revision={rev}")],
-            safe: false,
         }),
     }
 }
@@ -37,7 +36,6 @@ fn excess_revisions_finding(name: &str, count: u32, max_revisions: u64) -> Findi
             commands: vec![format!(
                 "sudo snap set system refresh.retain={max_revisions}"
             )],
-            safe: true,
         }),
     }
 }
@@ -142,7 +140,6 @@ impl Check for SnapAptDuplicateCheck {
                 remediation: Some(Remediation {
                     description: "Remove the APT version if the Snap is preferred.".into(),
                     commands: vec![format!("sudo apt remove --purge {name}")],
-                    safe: false,
                 }),
             });
         }
@@ -213,7 +210,6 @@ mod tests {
 
     fn ctx(runner: Arc<dyn CommandRunner>) -> Context {
         Context {
-            dry_run: false,
             verbose: false,
             config: Config::default(),
             distro: DistroInfo::default(),

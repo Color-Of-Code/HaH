@@ -83,7 +83,6 @@ mod tests {
 
     fn make_ctx() -> Context {
         Context {
-            dry_run: false,
             verbose: false,
             config: Config::default(),
             distro: DistroInfo::default(),

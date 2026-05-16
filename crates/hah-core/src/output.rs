@@ -100,7 +100,6 @@ mod tests {
             remediation: with_remediation.then(|| Remediation {
                 description: "Fix it".into(),
                 commands: vec!["sudo fix".into()],
-                safe: true,
             }),
         }
     }

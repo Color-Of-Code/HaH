@@ -627,7 +627,6 @@ impl RuleBasedCheck {
                 .iter()
                 .map(|c| render_template(c, values))
                 .collect(),
-            safe: rem.safe,
         });
         Finding {
             id: render_template(&out.finding_id, values),
@@ -839,7 +838,6 @@ rules:
         mock.expect_run().returning(|_, _| ok_output("hello\n"));
         let ctx = Context::new_with_runner(
             false,
-            false,
             Config::default(),
             DistroInfo::default(),
             std::sync::Arc::new(mock),
@@ -881,7 +879,6 @@ rules:
             .returning(move |_, _| ok_output(&df_output));
         let ctx = Context::new_with_runner(
             false,
-            false,
             Config::default(),
             DistroInfo::default(),
             std::sync::Arc::new(mock),
@@ -912,7 +909,7 @@ rules:
       description: ""
 "#,
         );
-        let ctx = Context::new(false, false, Config::default(), DistroInfo::default());
+        let ctx = Context::new(false, Config::default(), DistroInfo::default());
         // Default DistroInfo is not Debian family.
         let cr = check.run(&ctx);
         assert!(cr.findings.is_empty());
@@ -1009,7 +1006,7 @@ rules:
     outcome: { finding_id: x, title: "", description: "" }
 "#,
         );
-        let ctx = Context::new(false, false, Config::default(), DistroInfo::default());
+        let ctx = Context::new(false, Config::default(), DistroInfo::default());
         let cr = check.run(&ctx);
         // Non-existent path → no conflicts, no errors, no findings.
         assert!(cr.errors.is_empty());
@@ -1029,7 +1026,7 @@ rules:
     outcome: { finding_id: x, title: "", description: "" }
 "#,
         );
-        let ctx = Context::new(false, false, Config::default(), DistroInfo::default());
+        let ctx = Context::new(false, Config::default(), DistroInfo::default());
         let cr = check.run(&ctx);
         assert!(!cr.errors.is_empty());
     }
@@ -1228,7 +1225,7 @@ rules:
     outcome: { finding_id: x, title: "Legacy found", description: "" }
 "#,
         );
-        let ctx = Context::new(false, false, Config::default(), DistroInfo::default());
+        let ctx = Context::new(false, Config::default(), DistroInfo::default());
         let mut map = hah_core::runner::MockCommandRunner::default();
         map.expect_run().returning(|_, _| {
             Ok(hah_core::runner::CommandOutput {
@@ -1313,7 +1310,7 @@ rules:
     outcome: { finding_id: x, title: "", description: "" }
 "#,
         );
-        let ctx = Context::new(false, false, Config::default(), DistroInfo::default());
+        let ctx = Context::new(false, Config::default(), DistroInfo::default());
         // Default config profile is "" which does not match "server".
         assert!(!check.guard_passes(&ctx));
     }
@@ -1335,7 +1332,7 @@ rules:
             profile: "server".to_string(),
             ..Default::default()
         };
-        let ctx = Context::new(false, false, config, DistroInfo::default());
+        let ctx = Context::new(false, config, DistroInfo::default());
         assert!(check.guard_passes(&ctx));
     }
 
@@ -1352,7 +1349,7 @@ rules:
     outcome: { finding_id: x, title: "", description: "" }
 "#,
         );
-        let ctx = Context::new(false, false, Config::default(), DistroInfo::default());
+        let ctx = Context::new(false, Config::default(), DistroInfo::default());
         assert!(!check.guard_passes(&ctx));
     }
 
@@ -1369,7 +1366,7 @@ rules:
     outcome: { finding_id: x, title: "", description: "" }
 "#,
         );
-        let ctx = Context::new(false, false, Config::default(), DistroInfo::default());
+        let ctx = Context::new(false, Config::default(), DistroInfo::default());
         assert!(check.guard_passes(&ctx));
     }
 
@@ -1417,7 +1414,6 @@ rules:
             .returning(|_, _| ok_output("install ok installed"));
         let ctx = Context::new_with_runner(
             false,
-            false,
             Config::default(),
             DistroInfo::default(),
             std::sync::Arc::new(mock),
@@ -1434,7 +1430,6 @@ rules:
         mock.expect_run()
             .returning(|_, _| ok_output("deinstall ok deinstalled"));
         let ctx = Context::new_with_runner(
-            false,
             false,
             Config::default(),
             DistroInfo::default(),
@@ -1458,7 +1453,6 @@ rules:
         });
         let ctx = Context::new_with_runner(
             false,
-            false,
             Config::default(),
             DistroInfo::default(),
             std::sync::Arc::new(mock),
@@ -1479,7 +1473,6 @@ rules:
             })
         });
         let ctx = Context::new_with_runner(
-            false,
             false,
             Config::default(),
             DistroInfo::default(),
@@ -1522,7 +1515,6 @@ rules:
         let finding = check.make_finding(Severity::Warning, &values);
         let rem = finding.remediation.unwrap();
         assert_eq!(rem.description, "Own fix.");
-        assert!(rem.safe);
     }
 
     #[test]
@@ -1543,7 +1535,7 @@ rules:
         );
         let mut config = Config::default();
         config.thresholds.insert("boot_space_mb".to_string(), 100);
-        let ctx = Context::new(false, false, config, DistroInfo::default());
+        let ctx = Context::new(false, config, DistroInfo::default());
         let cr = check.run(&ctx);
         // 100 > 0 → condition fires
         assert_eq!(cr.findings.len(), 1);
@@ -1572,7 +1564,6 @@ rules:
         mock.expect_run()
             .returning(|_, _| ok_output("not_a_number\n"));
         let ctx = Context::new_with_runner(
-            false,
             false,
             Config::default(),
             DistroInfo::default(),
@@ -1603,7 +1594,7 @@ rules:
             id_like: "debian".into(),
             ..DistroInfo::default()
         };
-        let ctx = Context::new(false, false, Config::default(), distro);
+        let ctx = Context::new(false, Config::default(), distro);
         let cr = check.run(&ctx);
         assert_eq!(cr.findings.len(), 1);
     }

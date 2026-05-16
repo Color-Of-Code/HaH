@@ -41,7 +41,6 @@ pub(crate) fn scan_for_broken_symlinks(dirs: &[&str]) -> CheckResult {
             remediation: Some(Remediation {
                 description: "Remove the broken symlink.".into(),
                 commands: vec![format!("sudo rm {}", path.display())],
-                safe: false,
             }),
         });
     }
@@ -96,7 +95,6 @@ pub(crate) fn scan_crash_dirs(dirs: &[&str], max_days: u64) -> CheckResult {
             remediation: Some(Remediation {
                 description: "Remove old crash dump.".into(),
                 commands: vec![format!("sudo rm {parent}/{name}")],
-                safe: false,
             }),
         });
     }
@@ -141,7 +139,6 @@ impl Check for JournalSizeCheck {
                 remediation: Some(Remediation {
                     description: "Vacuum the journal to reclaim space.".into(),
                     commands: vec![format!("sudo journalctl --vacuum-size={threshold_mb}M")],
-                    safe: true,
                 }),
             })
         } else {
@@ -181,7 +178,6 @@ mod tests {
 
     fn make_ctx(runner: Arc<dyn CommandRunner>) -> Context {
         Context {
-            dry_run: false,
             verbose: false,
             config: Config::default(),
             distro: DistroInfo::default(),
