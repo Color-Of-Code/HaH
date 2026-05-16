@@ -1,5 +1,7 @@
 [workspace]
-members = []
+members = [
+    "crates/hah-utils",
+]
 resolver = "2"
 
 [workspace.dependencies]
