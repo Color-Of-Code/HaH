@@ -1,0 +1,129 @@
+# Example rule: legacy NTP daemon
+#
+# Demonstrates multi-probe rules and composite All/Any conditions.
+# Two rules cover the two distinct findings the built-in LegacyNtpCheck
+# emits:
+#
+#   legacy-ntp-conflict-dsl  (Warning) — ntp installed AND a modern time-sync
+#                                        service is active simultaneously
+#   legacy-ntp-dsl           (Info)    — ntp installed but no modern time-sync
+#                                        service is active
+#
+# The built-in LegacyNtpCheck already covers this — these rules exist to show
+# how probe triggers and composite conditions compose in the DSL.
+#
+# Copy to /etc/hah/rules.d/ or ~/.config/hah/rules.d/ to activate.
+
+# ── Shared reusable blocks ────────────────────────────────────────────────────
+
+blocks:
+  guards:
+    debian_ntp:
+      distro_family: debian
+
+  outcomes:
+    ntp_remediation:
+      remediation:
+        description: "Remove ntp and enable a modern time-sync service."
+        commands:
+          - "sudo apt remove --purge ntp"
+          - "sudo apt install chrony && sudo systemctl enable --now chrony"
+        safe: false
+
+# ── Rules ─────────────────────────────────────────────────────────────────────
+
+rules:
+
+  # Warning: ntp is installed AND a modern time-sync service is running.
+  # Both daemons will compete to adjust the clock.
+  - id: legacy-ntp-conflict-dsl
+    title: Legacy ntp package conflicts with active time-sync service (DSL example)
+
+    use:
+      guard: debian_ntp
+      outcome: ntp_remediation
+
+    triggers:
+      - name: ntp_installed
+        probe:
+          type: package_installed
+          name: ntp
+      - name: chrony_active
+        probe:
+          type: service_active
+          name: chrony
+      - name: timesyncd_active
+        probe:
+          type: service_active
+          name: systemd-timesyncd
+
+    conditions:
+      - type: all
+        severity: Warning
+        conditions:
+          - type: equals
+            value: "$ntp_installed"
+            expected: true
+          - type: any
+            severity: Warning
+            conditions:
+              - type: equals
+                value: "$chrony_active"
+                expected: true
+              - type: equals
+                value: "$timesyncd_active"
+                expected: true
+
+    outcome:
+      finding_id: legacy-ntp-conflict-dsl
+      title: "Legacy ntp package is installed alongside an active time-sync service"
+      description: >
+        The legacy ntp (ISC ntpd) package is installed while chrony or
+        systemd-timesyncd is also active.  Multiple time-sync daemons compete
+        to adjust the system clock, which can cause instability.  Remove the
+        ntp package and rely on the modern service instead.
+
+  # Info: ntp is installed but no modern time-sync alternative is active.
+  - id: legacy-ntp-dsl
+    title: Legacy ntp package installed (DSL example)
+
+    use:
+      guard: debian_ntp
+      outcome: ntp_remediation
+
+    triggers:
+      - name: ntp_installed
+        probe:
+          type: package_installed
+          name: ntp
+      - name: chrony_active
+        probe:
+          type: service_active
+          name: chrony
+      - name: timesyncd_active
+        probe:
+          type: service_active
+          name: systemd-timesyncd
+
+    conditions:
+      - type: all
+        severity: Info
+        conditions:
+          - type: equals
+            value: "$ntp_installed"
+            expected: true
+          - type: equals
+            value: "$chrony_active"
+            expected: false
+          - type: equals
+            value: "$timesyncd_active"
+            expected: false
+
+    outcome:
+      finding_id: legacy-ntp-dsl
+      title: "Legacy ntp (ISC ntpd) package is installed"
+      description: >
+        The legacy ntp (ISC ntpd) package is installed.  Modern alternatives
+        such as chrony (recommended for servers and VMs) or
+        systemd-timesyncd offer better accuracy, NTS/DNSSEC support, and
+        resilience to large clock jumps.

@@ -1,0 +1,48 @@
+# Example rule: systemd journal disk usage
+#
+# Demonstrates the JournalUsage capability, which runs `journalctl --disk-usage`
+# internally and returns the total size as an integer number of megabytes.
+#
+# The built-in JournalSizeCheck already covers this — this file exists to show
+# how capability triggers compose with numeric threshold conditions.
+#
+# Copy to /etc/hah/rules.d/ or ~/.config/hah/rules.d/ to activate.
+
+rules:
+  - id: journal-size-dsl
+    title: systemd journal disk usage (DSL example)
+
+    only_if:
+      require_commands:
+        - journalctl
+
+    # The journal_usage capability runs journalctl --disk-usage and returns
+    # the total size as Int(mb).
+    triggers:
+      - name: journal_mb
+        capability:
+          type: journal_usage
+
+    # Read the threshold from config (default 500 MB if not set).
+    values:
+      threshold_mb: "$config.journal_size_mb"
+
+    conditions:
+      - type: numeric_threshold
+        value: "$journal_mb"
+        operator: gt
+        threshold: "$threshold_mb"
+        severity: Warning
+
+    outcome:
+      finding_id: journal-size-large-dsl
+      title: "systemd journal is {journal_mb} MB"
+      description: >
+        The systemd journal occupies {journal_mb} MB, exceeding the
+        {threshold_mb} MB threshold.  Old journal entries can be vacuumed to
+        reclaim disk space.
+      remediation:
+        description: "Vacuum the journal to reclaim space."
+        commands:
+          - "sudo journalctl --vacuum-size={threshold_mb}M"
+        safe: true

@@ -1,0 +1,45 @@
+# Example rule: unused installed kernel packages
+#
+# Demonstrates the KernelInventory capability, which runs `uname -r` and
+# `dpkg-query` internally and returns a list of installed linux-image-*
+# packages whose version does not match the running kernel (i.e., safe to
+# remove).
+#
+# The built-in UnusedKernelsCheck already covers this — this file exists to
+# show how a command-runner capability returns a list for join/count.
+#
+# Copy to /etc/hah/rules.d/ or ~/.config/hah/rules.d/ to activate.
+
+rules:
+  - id: unused-kernels-dsl
+    title: Unused installed kernel packages (DSL example)
+
+    only_if:
+      distro_family: debian
+
+    triggers:
+      - name: unused_kernels
+        capability:
+          type: kernel_inventory
+
+    values:
+      unused_count: "$unused_kernels | count"
+      unused_list: "$unused_kernels | join(', ')"
+
+    conditions:
+      - type: non_empty
+        value: "$unused_kernels"
+        severity: Warning
+
+    outcome:
+      finding_id: unused-kernels-dsl
+      title: "{unused_count} unused kernel package(s) installed"
+      description: >
+        The following kernel packages are installed but do not match the
+        running kernel and can be safely removed: {unused_list}.
+        Removing them frees space in /boot and reduces update time.
+      remediation:
+        description: "Remove unused kernels with apt."
+        commands:
+          - "sudo apt autoremove --purge"
+        safe: false
