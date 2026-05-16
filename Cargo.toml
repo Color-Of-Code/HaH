@@ -1,0 +1,32 @@
+[workspace]
+members = []
+resolver = "2"
+
+[workspace.dependencies]
+mockall = "0.13"
+
+[workspace.lints.clippy]
+# ── Functional iterator / combinator style ──────────────────────────────────
+cloned_instead_of_copied           = "warn"
+filter_map_next                    = "warn"
+flat_map_option                    = "warn"
+map_flatten                        = "warn"
+map_unwrap_or                      = "warn"
+needless_collect                   = "warn"
+option_if_let_else                 = "warn"
+or_fun_call                        = "warn"
+redundant_closure_for_method_calls = "warn"
+
+# ── Error handling (no silent panics in production code) ─────────────────────
+unwrap_used = "warn"
+expect_used = "warn"
+panic       = "warn"
+
+# ── Immutability / purity ────────────────────────────────────────────────────
+mut_mut                  = "warn"
+needless_pass_by_ref_mut = "warn"
+
+[workspace.lints.rust]
+# `coverage` cfg is set by cargo-llvm-cov during coverage measurement.
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage)'] }
+warnings = "deny"
