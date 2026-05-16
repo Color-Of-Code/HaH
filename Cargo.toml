@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/hah-utils",
+    "crates/hah-core",
 ]
 resolver = "2"
 
