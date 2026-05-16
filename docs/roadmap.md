@@ -8,9 +8,6 @@ Planned features that are not yet implemented. Items are roughly ordered by prio
 
 | Feature | Notes |
 | ------- | ----- |
-| Interactive mode `--interactive` | Per-finding prompt: skip / show command / apply |
-| Fix mode `--fix` | Auto-apply safe remediations; prompt for unsafe ones |
-| Backup hooks | Call a user-configured script before any destructive action |
 | `hah report` | Audit report in HTML, Markdown, or JSON |
 | Profiles (`desktop`, `server`, `vm`, `container`) | Activate or skip check sets based on the declared system role |
 

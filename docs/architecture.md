@@ -32,11 +32,11 @@ hah
 | `CheckResult` | `check.rs` | List of `Finding` values returned by a check |
 | `Finding` | `model.rs` | A single issue: id, title, description, severity, optional `Remediation` |
 | `Severity` | `model.rs` | `Info`, `Warning`, or `Critical` |
-| `Remediation` | `model.rs` | Description, shell commands, and a `safe: bool` flag |
-| `Context` | `check.rs` | Passed to every check: `Config`, `DistroInfo`, `CommandRunner`, `dry_run`, `verbose` |
+| `Remediation` | `model.rs` | Description and suggested shell commands |
+| `Context` | `check.rs` | Passed to every check: `Config`, `DistroInfo`, `CommandRunner`, `verbose` |
 | `Config` | `config.rs` | Deserialised from YAML; thresholds, allowlist, denylist, check selection, rule dirs |
 | `DistroInfo` | `distro.rs` | Parsed from `/etc/os-release`; `is_debian_family()` helper |
-| `CommandRunner` | `runner.rs` | Trait for executing shell commands; mocked in tests |
+| `CommandRunner` | `runner.rs` | Trait for executing shell commands for data collection; mocked in tests |
 
 ### RuleValue (hah-dsl)
 
