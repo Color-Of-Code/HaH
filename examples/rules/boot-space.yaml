@@ -1,0 +1,54 @@
+# Example rule: check free space on /boot
+#
+# This file demonstrates the HaH declarative DSL.  Copy it to
+# /etc/hah/rules.d/ or ~/.config/hah/rules.d/ to activate it.
+#
+# The built-in BootSpaceCheck already covers this — the example is here purely
+# to show the DSL in action.
+
+rules:
+  - id: boot-space-dsl
+    title: Free space on /boot (DSL example)
+
+    # Only run on Debian/Ubuntu systems that have a /boot partition.
+    only_if:
+      distro_family: debian
+      require_commands:
+        - df
+
+    # Run `df` and extract the available bytes for /boot.
+    triggers:
+      - name: free_bytes
+        command:
+          program: df
+          args: ["--block-size=1", "--output=avail", "/boot"]
+        # Skip the header line, strip whitespace, parse as an integer.
+        transform: "$stdout | lines | nth(1) | trim | number"
+
+    # Derive a human-friendly megabyte value and read the threshold from config.
+    values:
+      free_mb: "$free_bytes | bytes_to_mb"
+      threshold_mb: "$config.boot_space_mb"
+
+    # Trigger a Critical finding when free space is below the threshold.
+    conditions:
+      - type: numeric_threshold
+        value: "$free_mb"
+        operator: lt
+        threshold: "$threshold_mb"
+        severity: Critical
+
+    # Template for the finding.  Variable names wrapped in {braces} are
+    # substituted at render time.
+    outcome:
+      finding_id: boot-space-low-dsl
+      title: "/boot has only {free_mb} MB free"
+      description: >
+        The /boot partition is nearly full ({free_mb} MB free,
+        threshold: {threshold_mb} MB).  This can prevent kernel upgrades or
+        initramfs updates from completing.
+      remediation:
+        description: "Remove unused kernels to free space on /boot."
+        commands:
+          - "sudo apt autoremove --purge"
+        safe: false
