@@ -2,6 +2,7 @@
 members = [
     "crates/hah-utils",
     "crates/hah-core",
+    "crates/hah-dsl",
 ]
 resolver = "2"
 
