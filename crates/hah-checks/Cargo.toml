@@ -1,0 +1,17 @@
+[package]
+name = "hah-checks"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+hah-core = { path = "../hah-core" }
+hah-utils = { path = "../hah-utils" }
+anyhow = "1"
+
+[dev-dependencies]
+mockall = { workspace = true }
+tempfile = "3"
+filetime = "0.2"
