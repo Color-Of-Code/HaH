@@ -1,0 +1,20 @@
+[package]
+name = "hah-core"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[features]
+mock = ["dep:mockall"]
+
+[dependencies]
+hah-utils = { path = "../hah-utils" }
+anyhow = "1"
+colored = "2"
+mockall = { workspace = true, optional = true }
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+mockall = { workspace = true }
