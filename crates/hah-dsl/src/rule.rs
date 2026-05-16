@@ -329,18 +329,7 @@ impl Check for RuleBasedCheck {
         }
 
         // ── 2. Seed value map with context ────────────────────────────────────
-        let mut values: ValueMap = HashMap::new();
-        for (key, &val) in &ctx.config.thresholds {
-            values.insert(format!("config.{key}"), RuleValue::Int(val as i64));
-        }
-        values.insert(
-            "distro.family".into(),
-            RuleValue::Str(if ctx.distro.is_debian_family() {
-                "debian".into()
-            } else {
-                "unknown".into()
-            }),
-        );
+        let mut values = self.seed_context_values(ctx);
 
         // ── 3. Run triggers ───────────────────────────────────────────────────
         for trigger in &self.rule.triggers {
@@ -382,6 +371,26 @@ impl Check for RuleBasedCheck {
             }
         }
         result
+    }
+}
+
+// ── Context seeding ───────────────────────────────────────────────────────────
+
+impl RuleBasedCheck {
+    fn seed_context_values(&self, ctx: &Context) -> ValueMap {
+        let mut values: ValueMap = HashMap::new();
+        for (key, &val) in &ctx.config.thresholds {
+            values.insert(format!("config.{key}"), RuleValue::Int(val as i64));
+        }
+        values.insert(
+            "distro.family".into(),
+            RuleValue::Str(if ctx.distro.is_debian_family() {
+                "debian".into()
+            } else {
+                "unknown".into()
+            }),
+        );
+        values
     }
 }
 
@@ -527,6 +536,40 @@ fn numeric_compare(lhs: i64, op: &CompareOp, rhs: i64) -> bool {
     }
 }
 
+fn eval_numeric_threshold(
+    value: &str,
+    operator: &CompareOp,
+    threshold: &str,
+    values: &ValueMap,
+) -> Result<bool> {
+    let lhs = eval_expr(value, values)?;
+    let rhs = eval_expr(threshold, values)?;
+    match (lhs.as_int(), rhs.as_int()) {
+        (Some(l), Some(r)) => Ok(numeric_compare(l, operator, r)),
+        _ => Err(anyhow!(
+            "numeric_threshold: both sides must be numeric (got {:?} and {:?})",
+            lhs.display(),
+            rhs.display()
+        )),
+    }
+}
+
+fn eval_equals(value: &str, expected: &ExpectedValue, values: &ValueMap) -> Result<bool> {
+    let actual = eval_expr(value, values)?;
+    Ok(match expected {
+        ExpectedValue::Bool(b) => actual.as_bool() == Some(*b),
+        ExpectedValue::Int(n) => actual.as_int() == Some(*n),
+        ExpectedValue::Str(s) => actual.as_str() == Some(s.as_str()),
+    })
+}
+
+fn eval_regex_match(value: &str, pattern: &str, values: &ValueMap) -> Result<bool> {
+    let re = regex::Regex::new(pattern)
+        .map_err(|e| anyhow!("invalid regex pattern {pattern:?}: {e}"))?;
+    let v = eval_expr(value, values)?;
+    Ok(re.is_match(v.as_str().unwrap_or("")))
+}
+
 impl RuleBasedCheck {
     fn eval_condition(&self, condition: &RuleCondition, values: &ValueMap) -> Result<bool> {
         match condition {
@@ -535,42 +578,16 @@ impl RuleBasedCheck {
                 operator,
                 threshold,
                 ..
-            } => {
-                let lhs = eval_expr(value, values)?;
-                let rhs = eval_expr(threshold, values)?;
-                match (lhs.as_int(), rhs.as_int()) {
-                    (Some(l), Some(r)) => Ok(numeric_compare(l, operator, r)),
-                    _ => Err(anyhow!(
-                        "numeric_threshold: both sides must be numeric (got {:?} and {:?})",
-                        lhs.display(),
-                        rhs.display()
-                    )),
-                }
-            }
+            } => eval_numeric_threshold(value, operator, threshold, values),
 
             RuleCondition::Equals {
                 value, expected, ..
-            } => {
-                let actual = eval_expr(value, values)?;
-                let matches = match expected {
-                    ExpectedValue::Bool(b) => actual.as_bool() == Some(*b),
-                    ExpectedValue::Int(n) => actual.as_int() == Some(*n),
-                    ExpectedValue::Str(s) => actual.as_str() == Some(s.as_str()),
-                };
-                Ok(matches)
-            }
+            } => eval_equals(value, expected, values),
 
-            RuleCondition::NonEmpty { value, .. } => {
-                let v = eval_expr(value, values)?;
-                Ok(v.is_truthy())
-            }
+            RuleCondition::NonEmpty { value, .. } => Ok(eval_expr(value, values)?.is_truthy()),
 
             RuleCondition::RegexMatch { value, pattern, .. } => {
-                let re = regex::Regex::new(pattern)
-                    .map_err(|e| anyhow!("invalid regex pattern {pattern:?}: {e}"))?;
-                let v = eval_expr(value, values)?;
-                let s = v.as_str().unwrap_or("");
-                Ok(re.is_match(s))
+                eval_regex_match(value, pattern, values)
             }
 
             RuleCondition::All { conditions, .. } => conditions

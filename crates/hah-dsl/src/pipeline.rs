@@ -127,27 +127,7 @@ fn parse_filter(token: &str) -> Result<Filter> {
         let name = token[..paren_pos].trim();
         let raw_arg = token[paren_pos + 1..token.len() - 1].trim();
         let arg = raw_arg.trim_matches('\'').trim_matches('"');
-        return match name {
-            "skip" => arg
-                .parse::<usize>()
-                .map(Filter::Skip)
-                .map_err(|_| anyhow!("skip: expected an integer argument, got {arg:?}")),
-            "nth" => arg
-                .parse::<usize>()
-                .map(Filter::Nth)
-                .map_err(|_| anyhow!("nth: expected an integer argument, got {arg:?}")),
-            "field" => arg
-                .parse::<usize>()
-                .map(Filter::Field)
-                .map_err(|_| anyhow!("field: expected an integer argument, got {arg:?}")),
-            "prefix_strip" => Ok(Filter::PrefixStrip(arg.to_string())),
-            "starts_with" => Ok(Filter::StartsWith(arg.to_string())),
-            "contains" => Ok(Filter::Contains(arg.to_string())),
-            "reject_contains" => Ok(Filter::RejectContains(arg.to_string())),
-            "join" => Ok(Filter::Join(arg.to_string())),
-            "default" => Ok(Filter::Default(arg.to_string())),
-            other => Err(anyhow!("unknown filter with arguments: {other}")),
-        };
+        return parse_filter_with_arg(name, arg);
     }
     match token {
         "trim" => Ok(Filter::Trim),
@@ -160,6 +140,30 @@ fn parse_filter(token: &str) -> Result<Filter> {
         "unique" => Ok(Filter::Unique),
         "bytes_to_mb" => Ok(Filter::BytesToMb),
         other => Err(anyhow!("unknown filter: {other}")),
+    }
+}
+
+fn parse_filter_with_arg(name: &str, arg: &str) -> Result<Filter> {
+    match name {
+        "skip" => arg
+            .parse::<usize>()
+            .map(Filter::Skip)
+            .map_err(|_| anyhow!("skip: expected an integer argument, got {arg:?}")),
+        "nth" => arg
+            .parse::<usize>()
+            .map(Filter::Nth)
+            .map_err(|_| anyhow!("nth: expected an integer argument, got {arg:?}")),
+        "field" => arg
+            .parse::<usize>()
+            .map(Filter::Field)
+            .map_err(|_| anyhow!("field: expected an integer argument, got {arg:?}")),
+        "prefix_strip" => Ok(Filter::PrefixStrip(arg.to_string())),
+        "starts_with" => Ok(Filter::StartsWith(arg.to_string())),
+        "contains" => Ok(Filter::Contains(arg.to_string())),
+        "reject_contains" => Ok(Filter::RejectContains(arg.to_string())),
+        "join" => Ok(Filter::Join(arg.to_string())),
+        "default" => Ok(Filter::Default(arg.to_string())),
+        other => Err(anyhow!("unknown filter with arguments: {other}")),
     }
 }
 
@@ -223,198 +227,281 @@ pub fn parse_pipeline(expr: &str) -> Result<Pipeline> {
     Ok(Pipeline { source, filters })
 }
 
-// ── Filter application ────────────────────────────────────────────────────────
+// ── Individual filter implementations ────────────────────────────────────────
+
+fn filter_trim(value: RuleValue) -> Result<RuleValue> {
+    match value {
+        RuleValue::Str(s) => Ok(RuleValue::Str(s.trim().to_string())),
+        other => Ok(other),
+    }
+}
+
+fn filter_lines(value: RuleValue) -> Result<RuleValue> {
+    match value {
+        RuleValue::Str(s) => Ok(RuleValue::List(
+            s.lines().map(|l| RuleValue::Str(l.to_string())).collect(),
+        )),
+        other => Ok(RuleValue::List(vec![other])),
+    }
+}
+
+fn filter_non_empty(value: RuleValue) -> Result<RuleValue> {
+    match value {
+        RuleValue::List(v) => Ok(RuleValue::List(
+            v.into_iter()
+                .filter(|x| match x {
+                    RuleValue::Str(s) => !s.is_empty(),
+                    RuleValue::Null => false,
+                    _ => true,
+                })
+                .collect(),
+        )),
+        RuleValue::Str(s) if s.is_empty() => Ok(RuleValue::Null),
+        other => Ok(other),
+    }
+}
+
+fn filter_skip(value: RuleValue, n: usize) -> Result<RuleValue> {
+    match value {
+        RuleValue::List(v) => Ok(RuleValue::List(v.into_iter().skip(n).collect())),
+        other => Err(anyhow!("skip: expected a list, got {:?}", other.display())),
+    }
+}
+
+fn filter_first(value: RuleValue) -> Result<RuleValue> {
+    match value {
+        RuleValue::List(mut v) => Ok(if v.is_empty() {
+            RuleValue::Null
+        } else {
+            v.remove(0)
+        }),
+        other => Ok(other),
+    }
+}
+
+fn filter_nth(value: RuleValue, n: usize) -> Result<RuleValue> {
+    match value {
+        RuleValue::List(v) => Ok(v.into_iter().nth(n).unwrap_or(RuleValue::Null)),
+        other => Err(anyhow!("nth: expected a list, got {:?}", other.display())),
+    }
+}
+
+fn filter_field(value: RuleValue, n: usize) -> Result<RuleValue> {
+    match value {
+        RuleValue::Str(s) => Ok(s
+            .split_whitespace()
+            .nth(n)
+            .map_or(RuleValue::Null, |f| RuleValue::Str(f.to_string()))),
+        other => Err(anyhow!(
+            "field: expected a string, got {:?}",
+            other.display()
+        )),
+    }
+}
+
+fn filter_number(value: RuleValue) -> Result<RuleValue> {
+    match value {
+        RuleValue::Int(n) => Ok(RuleValue::Int(n)),
+        RuleValue::Str(s) => s
+            .trim()
+            .parse::<i64>()
+            .map(RuleValue::Int)
+            .map_err(|_| anyhow!("number: cannot parse {:?} as an integer", s)),
+        other => Err(anyhow!(
+            "number: expected a string or int, got {:?}",
+            other.display()
+        )),
+    }
+}
+
+fn filter_count(value: &RuleValue) -> RuleValue {
+    let n: i64 = match value {
+        RuleValue::List(v) => v.len() as i64,
+        RuleValue::Str(s) => i64::from(!s.is_empty()),
+        RuleValue::Null => 0,
+        _ => 1,
+    };
+    RuleValue::Int(n)
+}
+
+fn filter_prefix_strip(value: RuleValue, prefix: &str) -> Result<RuleValue> {
+    match value {
+        RuleValue::Str(s) => Ok(RuleValue::Str(
+            s.strip_prefix(prefix).unwrap_or(&s).to_string(),
+        )),
+        RuleValue::List(v) => Ok(RuleValue::List(
+            v.into_iter()
+                .map(|item| match item {
+                    RuleValue::Str(s) => {
+                        RuleValue::Str(s.strip_prefix(prefix).unwrap_or(&s).to_string())
+                    }
+                    other => other,
+                })
+                .collect(),
+        )),
+        other => Err(anyhow!(
+            "prefix_strip: expected a string or list, got {:?}",
+            other.display()
+        )),
+    }
+}
+
+fn filter_starts_with(value: RuleValue, prefix: &str) -> Result<RuleValue> {
+    match value {
+        RuleValue::List(v) => Ok(RuleValue::List(
+            v.into_iter()
+                .filter(|item| match item {
+                    RuleValue::Str(s) => s.starts_with(prefix),
+                    _ => false,
+                })
+                .collect(),
+        )),
+        RuleValue::Str(s) => Ok(if s.starts_with(prefix) {
+            RuleValue::Str(s)
+        } else {
+            RuleValue::Null
+        }),
+        other => Err(anyhow!(
+            "starts_with: expected a list or string, got {:?}",
+            other.display()
+        )),
+    }
+}
+
+fn filter_contains(value: &RuleValue, substring: &str) -> Result<RuleValue> {
+    match value {
+        RuleValue::List(v) => Ok(RuleValue::Bool(v.iter().any(|item| match item {
+            RuleValue::Str(s) => s.contains(substring),
+            _ => false,
+        }))),
+        RuleValue::Str(s) => Ok(RuleValue::Bool(s.contains(substring))),
+        _ => Ok(RuleValue::Bool(false)),
+    }
+}
+
+fn filter_reject_contains(value: RuleValue, substring: &str) -> Result<RuleValue> {
+    match value {
+        RuleValue::List(v) => Ok(RuleValue::List(
+            v.into_iter()
+                .filter(|item| match item {
+                    RuleValue::Str(s) => !s.contains(substring),
+                    _ => true,
+                })
+                .collect(),
+        )),
+        other => Err(anyhow!(
+            "reject_contains: expected a list, got {:?}",
+            other.display()
+        )),
+    }
+}
+
+fn filter_sort(value: RuleValue) -> Result<RuleValue> {
+    match value {
+        RuleValue::List(mut v) => {
+            v.sort_by_key(RuleValue::display);
+            Ok(RuleValue::List(v))
+        }
+        other => Ok(other),
+    }
+}
+
+fn filter_unique(value: RuleValue) -> Result<RuleValue> {
+    match value {
+        RuleValue::List(v) => {
+            let mut seen = HashSet::new();
+            Ok(RuleValue::List(
+                v.into_iter().filter(|x| seen.insert(x.display())).collect(),
+            ))
+        }
+        other => Ok(other),
+    }
+}
+
+fn filter_join(value: RuleValue, sep: &str) -> Result<RuleValue> {
+    match value {
+        RuleValue::List(v) => Ok(RuleValue::Str(
+            v.iter()
+                .map(RuleValue::display)
+                .collect::<Vec<_>>()
+                .join(sep),
+        )),
+        RuleValue::Str(s) => Ok(RuleValue::Str(s)),
+        other => Err(anyhow!("join: expected a list, got {:?}", other.display())),
+    }
+}
+
+fn filter_bytes_to_mb(value: RuleValue) -> Result<RuleValue> {
+    match value {
+        RuleValue::Int(n) => Ok(RuleValue::Int(n / 1_048_576)),
+        RuleValue::Str(s) => s
+            .trim()
+            .parse::<i64>()
+            .map(|n| RuleValue::Int(n / 1_048_576))
+            .map_err(|_| anyhow!("bytes_to_mb: cannot parse {:?} as an integer", s)),
+        other => Err(anyhow!(
+            "bytes_to_mb: expected int or string, got {:?}",
+            other.display()
+        )),
+    }
+}
+
+fn filter_default(value: RuleValue, default_val: &str) -> RuleValue {
+    let use_default =
+        matches!(value, RuleValue::Null) || matches!(&value, RuleValue::Str(s) if s.is_empty());
+    if use_default {
+        RuleValue::Str(default_val.to_string())
+    } else {
+        value
+    }
+}
+
+// ── Filter dispatch ───────────────────────────────────────────────────────────
+
+fn apply_scalar_filter(value: RuleValue, filter: &Filter) -> Result<RuleValue> {
+    match filter {
+        Filter::Trim => filter_trim(value),
+        Filter::Lines => filter_lines(value),
+        Filter::NonEmpty => filter_non_empty(value),
+        Filter::First => filter_first(value),
+        Filter::Sort => filter_sort(value),
+        Filter::Unique => filter_unique(value),
+        Filter::Count => Ok(filter_count(&value)),
+        Filter::Skip(n) => filter_skip(value, *n),
+        Filter::Nth(n) => filter_nth(value, *n),
+        Filter::Field(n) => filter_field(value, *n),
+        Filter::Number => filter_number(value),
+        _ => unreachable!(),
+    }
+}
+
+fn apply_string_filter(value: RuleValue, filter: &Filter) -> Result<RuleValue> {
+    match filter {
+        Filter::PrefixStrip(p) => filter_prefix_strip(value, p),
+        Filter::StartsWith(p) => filter_starts_with(value, p),
+        Filter::Contains(s) => filter_contains(&value, s),
+        Filter::RejectContains(s) => filter_reject_contains(value, s),
+        Filter::Join(sep) => filter_join(value, sep),
+        Filter::BytesToMb => filter_bytes_to_mb(value),
+        Filter::Default(d) => Ok(filter_default(value, d)),
+        _ => unreachable!(),
+    }
+}
 
 fn apply_filter(value: RuleValue, filter: &Filter) -> Result<RuleValue> {
     match filter {
-        Filter::Trim => match value {
-            RuleValue::Str(s) => Ok(RuleValue::Str(s.trim().to_string())),
-            other => Ok(other),
-        },
-
-        Filter::Lines => match value {
-            RuleValue::Str(s) => Ok(RuleValue::List(
-                s.lines().map(|l| RuleValue::Str(l.to_string())).collect(),
-            )),
-            other => Ok(RuleValue::List(vec![other])),
-        },
-
-        Filter::NonEmpty => match value {
-            RuleValue::List(v) => Ok(RuleValue::List(
-                v.into_iter()
-                    .filter(|x| match x {
-                        RuleValue::Str(s) => !s.is_empty(),
-                        RuleValue::Null => false,
-                        _ => true,
-                    })
-                    .collect(),
-            )),
-            RuleValue::Str(s) if s.is_empty() => Ok(RuleValue::Null),
-            other => Ok(other),
-        },
-
-        Filter::Skip(n) => match value {
-            RuleValue::List(v) => Ok(RuleValue::List(v.into_iter().skip(*n).collect())),
-            other => Err(anyhow!("skip: expected a list, got {:?}", other.display())),
-        },
-
-        Filter::First => match value {
-            RuleValue::List(mut v) => Ok(if v.is_empty() {
-                RuleValue::Null
-            } else {
-                v.remove(0)
-            }),
-            other => Ok(other),
-        },
-
-        Filter::Nth(n) => match value {
-            RuleValue::List(v) => Ok(v.into_iter().nth(*n).unwrap_or(RuleValue::Null)),
-            other => Err(anyhow!("nth: expected a list, got {:?}", other.display())),
-        },
-
-        Filter::Field(n) => match value {
-            RuleValue::Str(s) => Ok(s
-                .split_whitespace()
-                .nth(*n)
-                .map_or(RuleValue::Null, |f| RuleValue::Str(f.to_string()))),
-            other => Err(anyhow!(
-                "field: expected a string, got {:?}",
-                other.display()
-            )),
-        },
-
-        Filter::Number => match value {
-            RuleValue::Int(n) => Ok(RuleValue::Int(n)),
-            RuleValue::Str(s) => s
-                .trim()
-                .parse::<i64>()
-                .map(RuleValue::Int)
-                .map_err(|_| anyhow!("number: cannot parse {:?} as an integer", s)),
-            other => Err(anyhow!(
-                "number: expected a string or int, got {:?}",
-                other.display()
-            )),
-        },
-
-        Filter::PrefixStrip(prefix) => match value {
-            RuleValue::Str(s) => Ok(RuleValue::Str(
-                s.strip_prefix(prefix.as_str()).unwrap_or(&s).to_string(),
-            )),
-            RuleValue::List(v) => Ok(RuleValue::List(
-                v.into_iter()
-                    .map(|item| match item {
-                        RuleValue::Str(s) => RuleValue::Str(
-                            s.strip_prefix(prefix.as_str()).unwrap_or(&s).to_string(),
-                        ),
-                        other => other,
-                    })
-                    .collect(),
-            )),
-            other => Err(anyhow!(
-                "prefix_strip: expected a string or list, got {:?}",
-                other.display()
-            )),
-        },
-
-        Filter::StartsWith(prefix) => match value {
-            RuleValue::List(v) => Ok(RuleValue::List(
-                v.into_iter()
-                    .filter(|item| match item {
-                        RuleValue::Str(s) => s.starts_with(prefix.as_str()),
-                        _ => false,
-                    })
-                    .collect(),
-            )),
-            RuleValue::Str(s) => Ok(if s.starts_with(prefix.as_str()) {
-                RuleValue::Str(s)
-            } else {
-                RuleValue::Null
-            }),
-            other => Err(anyhow!(
-                "starts_with: expected a list or string, got {:?}",
-                other.display()
-            )),
-        },
-
-        Filter::Contains(substring) => match &value {
-            RuleValue::List(v) => Ok(RuleValue::Bool(v.iter().any(|item| match item {
-                RuleValue::Str(s) => s.contains(substring.as_str()),
-                _ => false,
-            }))),
-            RuleValue::Str(s) => Ok(RuleValue::Bool(s.contains(substring.as_str()))),
-            _ => Ok(RuleValue::Bool(false)),
-        },
-
-        Filter::RejectContains(substring) => match value {
-            RuleValue::List(v) => Ok(RuleValue::List(
-                v.into_iter()
-                    .filter(|item| match item {
-                        RuleValue::Str(s) => !s.contains(substring.as_str()),
-                        _ => true,
-                    })
-                    .collect(),
-            )),
-            other => Err(anyhow!(
-                "reject_contains: expected a list, got {:?}",
-                other.display()
-            )),
-        },
-
-        Filter::Count => Ok(RuleValue::Int(match &value {
-            RuleValue::List(v) => v.len() as i64,
-            RuleValue::Str(s) if s.is_empty() => 0,
-            RuleValue::Str(_) => 1,
-            RuleValue::Null => 0,
-            _ => 1,
-        })),
-
-        Filter::Sort => match value {
-            RuleValue::List(mut v) => {
-                v.sort_by_key(RuleValue::display);
-                Ok(RuleValue::List(v))
-            }
-            other => Ok(other),
-        },
-
-        Filter::Unique => match value {
-            RuleValue::List(v) => {
-                let mut seen = HashSet::new();
-                Ok(RuleValue::List(
-                    v.into_iter().filter(|x| seen.insert(x.display())).collect(),
-                ))
-            }
-            other => Ok(other),
-        },
-
-        Filter::Join(sep) => match value {
-            RuleValue::List(v) => Ok(RuleValue::Str(
-                v.iter()
-                    .map(RuleValue::display)
-                    .collect::<Vec<_>>()
-                    .join(sep),
-            )),
-            RuleValue::Str(s) => Ok(RuleValue::Str(s)),
-            other => Err(anyhow!("join: expected a list, got {:?}", other.display())),
-        },
-
-        Filter::BytesToMb => match value {
-            RuleValue::Int(n) => Ok(RuleValue::Int(n / 1_048_576)),
-            RuleValue::Str(s) => s
-                .trim()
-                .parse::<i64>()
-                .map(|n| RuleValue::Int(n / 1_048_576))
-                .map_err(|_| anyhow!("bytes_to_mb: cannot parse {:?} as an integer", s)),
-            other => Err(anyhow!(
-                "bytes_to_mb: expected int or string, got {:?}",
-                other.display()
-            )),
-        },
-
-        Filter::Default(default_val) => Ok(match value {
-            RuleValue::Null => RuleValue::Str(default_val.clone()),
-            RuleValue::Str(s) if s.is_empty() => RuleValue::Str(default_val.clone()),
-            other => other,
-        }),
+        Filter::Trim
+        | Filter::Lines
+        | Filter::NonEmpty
+        | Filter::First
+        | Filter::Sort
+        | Filter::Unique
+        | Filter::Count
+        | Filter::Skip(_)
+        | Filter::Nth(_)
+        | Filter::Field(_)
+        | Filter::Number => apply_scalar_filter(value, filter),
+        _ => apply_string_filter(value, filter),
     }
 }
 

@@ -1,9 +1,46 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use hah_core::{
     check::{Check, Context},
     model::{CheckResult, Finding, Remediation, Severity},
 };
+
+// ── Finding builders ────────────────────────────────────────────────────────
+
+fn disabled_revision_finding(name: &str, rev: &str) -> Finding {
+    Finding {
+        id: format!("snap-disabled-{name}-{rev}"),
+        title: format!("Snap '{name}' revision {rev} is disabled"),
+        description: format!(
+            "Disabled snap revisions still consume disk space. \
+             Consider removing old revisions of '{name}'."
+        ),
+        severity: Severity::Info,
+        remediation: Some(Remediation {
+            description: format!("Remove disabled revision {rev} of {name}."),
+            commands: vec![format!("sudo snap remove {name} --revision={rev}")],
+            safe: false,
+        }),
+    }
+}
+
+fn excess_revisions_finding(name: &str, count: u32, max_revisions: u64) -> Finding {
+    Finding {
+        id: format!("snap-too-many-revisions-{name}"),
+        title: format!("Snap '{name}' has {count} retained revisions (threshold: {max_revisions})"),
+        description: format!(
+            "Snap retains {count} revisions of '{name}', which wastes disk space."
+        ),
+        severity: Severity::Info,
+        remediation: Some(Remediation {
+            description: "Reduce the number of snap revisions retained.".into(),
+            commands: vec![format!(
+                "sudo snap set system refresh.retain={max_revisions}"
+            )],
+            safe: true,
+        }),
+    }
+}
 
 // ── SnapHealthCheck ──────────────────────────────────────────────────────────
 
@@ -20,17 +57,13 @@ impl Check for SnapHealthCheck {
 
     fn run(&self, ctx: &Context) -> CheckResult {
         let max_revisions = ctx.config.threshold("snap_max_revisions", 2);
-
         let out = match ctx.runner.run("snap", &["list", "--all"]) {
             Ok(o) => o,
             Err(_) => return CheckResult::default(), // snap not installed
         };
-
         let stdout = String::from_utf8_lossy(&out.stdout);
-        let mut snap_revisions: std::collections::HashMap<String, u32> =
-            std::collections::HashMap::new();
+        let mut snap_revisions: HashMap<String, u32> = HashMap::new();
         let mut result = CheckResult::default();
-
         for line in stdout.lines().skip(1) {
             let fields: Vec<&str> = line.split_whitespace().collect();
             if fields.len() < 3 {
@@ -38,48 +71,14 @@ impl Check for SnapHealthCheck {
             }
             let name = fields[0].to_string();
             let rev = fields[2].to_string();
-            // Notes column is last; "disabled" appears there for old revisions
-            let notes = fields.last().copied().unwrap_or("");
-
-            if notes.contains("disabled") {
-                result = result.with_finding(Finding {
-                    id: format!("snap-disabled-{name}-{rev}"),
-                    title: format!("Snap '{name}' revision {rev} is disabled"),
-                    description: format!(
-                        "Disabled snap revisions still consume disk space. \
-                         Consider removing old revisions of '{name}'."
-                    ),
-                    severity: Severity::Info,
-                    remediation: Some(Remediation {
-                        description: format!("Remove disabled revision {rev} of {name}."),
-                        commands: vec![format!("sudo snap remove {name} --revision={rev}")],
-                        safe: false,
-                    }),
-                });
+            if fields.last().copied().unwrap_or("").contains("disabled") {
+                result = result.with_finding(disabled_revision_finding(&name, &rev));
             }
-
             *snap_revisions.entry(name).or_default() += 1;
         }
-
         for (name, count) in &snap_revisions {
             if *count > max_revisions as u32 {
-                result = result.with_finding(Finding {
-                    id: format!("snap-too-many-revisions-{name}"),
-                    title: format!(
-                        "Snap '{name}' has {count} retained revisions (threshold: {max_revisions})"
-                    ),
-                    description: format!(
-                        "Snap retains {count} revisions of '{name}', which wastes disk space."
-                    ),
-                    severity: Severity::Info,
-                    remediation: Some(Remediation {
-                        description: "Reduce the number of snap revisions retained.".into(),
-                        commands: vec![format!(
-                            "sudo snap set system refresh.retain={max_revisions}"
-                        )],
-                        safe: true,
-                    }),
-                });
+                result = result.with_finding(excess_revisions_finding(name, *count, max_revisions));
             }
         }
         result
