@@ -123,6 +123,12 @@ impl Check for SnapAptDuplicateCheck {
 
         let mut result = CheckResult::default();
         for name in snaps.intersection(&apt) {
+            // snapd is intentionally present in both: the Debian package
+            // bootstraps the host, then the snapd snap takes over for
+            // self-updates. Reporting it as a duplicate is a false positive.
+            if name == "snapd" {
+                continue;
+            }
             if ctx.config.allowlist.packages.contains(name) {
                 continue;
             }
@@ -337,6 +343,25 @@ mod tests {
         assert!(
             SnapAptDuplicateCheck.run(&c).findings.is_empty(),
             "allowlisted package must not produce a finding"
+        );
+    }
+
+    #[test]
+    fn snapd_present_in_both_apt_and_snap_is_not_reported() {
+        // snapd Debian package is the bootstrap; the snap updates itself.
+        // Having both is expected and must not produce a finding.
+        let mock = MockRunner::new();
+        mock.on(
+            "snap",
+            b"Name   Version  Rev  Tracking        Publisher  Notes\n\
+              snapd  2.63     21   latest/stable   canonical  -\n",
+            true,
+        );
+        mock.on("dpkg-query", b"snapd\n", true);
+        let result = SnapAptDuplicateCheck.run(&ctx(Arc::new(mock)));
+        assert!(
+            result.findings.is_empty(),
+            "snapd must not be reported as a snap/apt duplicate"
         );
     }
 
