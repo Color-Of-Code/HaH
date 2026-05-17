@@ -12,8 +12,8 @@ setup:
 	rustup component add llvm-tools-preview clippy rustfmt
 	cargo install cargo-audit
 	cargo install cargo-llvm-cov
-	python3 --version
 	cargo build --manifest-path tools/hah-metrics/Cargo.toml --release
+	cargo build --manifest-path tools/hah-deps/Cargo.toml --release
 
 fmt:
 	cargo fmt --all
@@ -42,7 +42,10 @@ metrics:
 		--max-length $(METRIC_MAX_LENGTH)
 
 doc-dependencies:
-	python3 tools/gen_deps_doc.py > DEPENDENCIES.md
+	cargo run --manifest-path tools/hah-deps/Cargo.toml --release --quiet > DEPENDENCIES.md
 
-check: fmt-check lint test audit coverage-ci metrics
+check-dependencies:
+	cargo run --manifest-path tools/hah-deps/Cargo.toml --release --quiet -- --check
+
+check: fmt-check lint test audit coverage-ci metrics check-dependencies
 
