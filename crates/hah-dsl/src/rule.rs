@@ -234,6 +234,7 @@ pub enum CapabilitySpec {
     KernelInventory,
     StaleKernelHeaders,
     JournalUsage,
+    NtpActiveServices,
 }
 
 // ── Conditions ────────────────────────────────────────────────────────────────
@@ -572,6 +573,7 @@ fn dispatch_capability(spec: &CapabilitySpec, ctx: &Context) -> Result<RuleValue
         CapabilitySpec::StaleKernelHeaders => {
             capabilities::stale_kernel_headers(ctx.runner.as_ref())
         }
+        CapabilitySpec::NtpActiveServices => capabilities::ntp_active_services(ctx.runner.as_ref()),
     }
 }
 

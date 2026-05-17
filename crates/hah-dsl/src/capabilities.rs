@@ -198,6 +198,30 @@ pub fn stale_kernel_headers(runner: &dyn CommandRunner) -> Result<RuleValue> {
     Ok(RuleValue::List(stale))
 }
 
+// ── NtpActiveServices ─────────────────────────────────────────────────────────
+
+/// Return a `List` of active NTP service labels.
+///
+/// Checks `ntp`, `chrony`, `openntpd`, and `systemd-timesyncd`.
+pub fn ntp_active_services(runner: &dyn CommandRunner) -> Result<RuleValue> {
+    let candidates = [
+        ("ntp", "ntp (ntpd)"),
+        ("chrony", "chrony"),
+        ("openntpd", "openntpd"),
+        ("systemd-timesyncd", "systemd-timesyncd"),
+    ];
+    let active: Vec<RuleValue> = candidates
+        .iter()
+        .filter(|(svc, _)| {
+            runner
+                .run("systemctl", &["is-active", "--quiet", svc])
+                .is_ok_and(|o| o.success)
+        })
+        .map(|(_, label)| RuleValue::Str((*label).into()))
+        .collect();
+    Ok(RuleValue::List(active))
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

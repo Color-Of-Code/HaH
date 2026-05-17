@@ -1,0 +1,30 @@
+rules:
+  - id: ntp-conflict
+    title: Multiple NTP services active simultaneously
+    triggers:
+      - name: active_ntp
+        capability:
+          type: ntp_active_services
+    values:
+      ntp_count: "$active_ntp | count"
+      ntp_list: "$active_ntp | join(', ')"
+    conditions:
+      - type: numeric_threshold
+        value: "$ntp_count"
+        operator: gt
+        threshold: "1"
+        severity: Warning
+    outcome:
+      finding_id: ntp-conflict
+      title: "Multiple NTP services active: {ntp_list}"
+      description: >-
+        The following time-sync services are all active: {ntp_list}.
+        Competing daemons can fight over the system clock and cause
+        time jumps, log timestamp corruption, or TLS certificate errors.
+      remediation:
+        description: "Disable all but one NTP service (chrony is recommended)."
+        commands:
+          - "sudo systemctl disable --now ntp"
+          - "sudo systemctl disable --now openntpd"
+          - "sudo systemctl disable --now systemd-timesyncd"
+          - "# Then enable only one: sudo systemctl enable --now chrony"
