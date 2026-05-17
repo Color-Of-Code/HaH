@@ -1,6 +1,7 @@
 use crate::pipeline::{Filter, RuleValue};
 use anyhow::Result;
 
+pub mod build;
 pub mod list;
 pub mod scalar;
 pub mod string;

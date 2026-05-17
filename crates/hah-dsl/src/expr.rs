@@ -1,6 +1,6 @@
 //! Strongly typed expression AST for the HaH DSL.
 
-use crate::pipeline::{Filter, RuleValue, ValueMap};
+use crate::pipeline::{RuleValue, ValueMap};
 use anyhow::{Result, anyhow};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -26,7 +26,7 @@ impl Expression {
                 for arg in args {
                     evaled_args.push(arg.eval(values)?);
                 }
-                apply_filter_new(RuleValue::Null, name, evaled_args)
+                apply_filter(RuleValue::Null, name, evaled_args)
             }
             Self::Pipeline(steps) => {
                 if steps.is_empty() {
@@ -41,7 +41,7 @@ impl Expression {
                             for arg in args {
                                 evaled_args.push(arg.eval(values)?);
                             }
-                            apply_filter_new(current, name, evaled_args)?
+                            apply_filter(current, name, evaled_args)?
                         }
                         _ => return Err(anyhow!("Expected filter in pipeline, got {:?}", step)),
                     };
@@ -52,105 +52,9 @@ impl Expression {
     }
 }
 
-fn apply_filter_new(value: RuleValue, name: &str, args: Vec<RuleValue>) -> Result<RuleValue> {
-    let filter = build_filter(name, args)?;
+fn apply_filter(value: RuleValue, name: &str, args: Vec<RuleValue>) -> Result<RuleValue> {
+    let filter = crate::filters::build::build_filter(name, args)?;
     crate::filters::apply(value, &filter)
-}
-
-fn build_filter(name: &str, args: Vec<RuleValue>) -> Result<Filter> {
-    // Zero-argument filters
-    if let Some(f) = zero_arg_filter(name) {
-        return Ok(f);
-    }
-    // Filters that take an integer argument
-    if let Some(f) = int_arg_filter(name, &args)? {
-        return Ok(f);
-    }
-    // Filters that take a string argument
-    if let Some(f) = str_arg_filter(name, &args)? {
-        return Ok(f);
-    }
-    // Filters that take a list argument
-    if let Some(f) = list_arg_filter(name, &args)? {
-        return Ok(f);
-    }
-    Err(anyhow!("Unknown filter: {}", name))
-}
-
-fn zero_arg_filter(name: &str) -> Option<Filter> {
-    match name {
-        "trim" => Some(Filter::Trim),
-        "lines" => Some(Filter::Lines),
-        "non_empty" => Some(Filter::NonEmpty),
-        "first" => Some(Filter::First),
-        "last" => Some(Filter::Last),
-        "number" => Some(Filter::Number),
-        "count" => Some(Filter::Count),
-        "sort" => Some(Filter::Sort),
-        "unique" => Some(Filter::Unique),
-        "bytes_to_mb" => Some(Filter::BytesToMb),
-        _ => None,
-    }
-}
-
-fn int_arg_filter(name: &str, args: &[RuleValue]) -> Result<Option<Filter>> {
-    let n = || -> Result<usize> {
-        args.first()
-            .and_then(RuleValue::as_int)
-            .map(|n| n as usize)
-            .ok_or_else(|| anyhow!("{} requires an integer argument", name))
-    };
-    match name {
-        "skip" => Ok(Some(Filter::Skip(n()?))),
-        "nth" => Ok(Some(Filter::Nth(n()?))),
-        "field" => Ok(Some(Filter::Field(n()?))),
-        "group_count" => Ok(Some(Filter::GroupCount(n()?))),
-        "where_gt" => {
-            let v = args
-                .first()
-                .and_then(RuleValue::as_int)
-                .ok_or_else(|| anyhow!("where_gt requires an integer argument"))?;
-            Ok(Some(Filter::WhereGt(v)))
-        }
-        _ => Ok(None),
-    }
-}
-
-fn require_str_arg<'a>(name: &str, args: &'a [RuleValue]) -> Result<&'a str> {
-    args.first()
-        .and_then(RuleValue::as_str)
-        .ok_or_else(|| anyhow!("{} requires a string argument", name))
-}
-
-fn str_arg_filter(name: &str, args: &[RuleValue]) -> Result<Option<Filter>> {
-    let ctor: fn(String) -> Filter = match name {
-        "prefix_strip" => Filter::PrefixStrip,
-        "starts_with" => Filter::StartsWith,
-        "contains" => Filter::Contains,
-        "reject_contains" => Filter::RejectContains,
-        "icontains" => Filter::IContains,
-        "join" => Filter::Join,
-        "default" => Filter::Default,
-        _ => return Ok(None),
-    };
-    Ok(Some(ctor(require_str_arg(name, args)?.to_string())))
-}
-
-fn list_arg_filter(name: &str, args: &[RuleValue]) -> Result<Option<Filter>> {
-    match name {
-        "intersect" | "reject_in" => {
-            let items = args
-                .first()
-                .and_then(RuleValue::as_list)
-                .ok_or_else(|| anyhow!("{name} requires a list argument"))?;
-            let strings: Vec<String> = items.iter().map(RuleValue::display).collect();
-            Ok(Some(match name {
-                "intersect" => Filter::Intersect(strings),
-                _ => Filter::RejectIn(strings),
-            }))
-        }
-        _ => Ok(None),
-    }
 }
 
 #[cfg(test)]
