@@ -1,19 +1,51 @@
 use crate::pipeline::RuleValue;
 use anyhow::{Result, anyhow};
 
-pub fn trim(value: RuleValue) -> Result<RuleValue> {
+fn map_string_or_list<F>(value: RuleValue, filter_name: &str, map: F) -> Result<RuleValue>
+where
+    F: Fn(&str) -> RuleValue,
+{
     match value {
-        RuleValue::Str(s) => Ok(RuleValue::Str(s.trim().to_string())),
+        RuleValue::Str(s) => Ok(map(&s)),
         RuleValue::List(v) => Ok(RuleValue::List(
             v.into_iter()
                 .map(|item| match item {
-                    RuleValue::Str(s) => RuleValue::Str(s.trim().to_string()),
+                    RuleValue::Str(s) => map(&s),
                     other => other,
                 })
                 .collect(),
         )),
-        other => Err(anyhow!("trim: expected a string or list, got {:?}", other)),
+        other => Err(anyhow!(
+            "{filter_name}: expected a string or list, got {:?}",
+            other
+        )),
     }
+}
+
+fn filter_string_list<F>(
+    value: RuleValue,
+    filter_name: &str,
+    keep_non_strings: bool,
+    predicate: F,
+) -> Result<RuleValue>
+where
+    F: Fn(&str) -> bool,
+{
+    match value {
+        RuleValue::List(v) => Ok(RuleValue::List(
+            v.into_iter()
+                .filter(|item| match item {
+                    RuleValue::Str(s) => predicate(s),
+                    _ => keep_non_strings,
+                })
+                .collect(),
+        )),
+        other => Err(anyhow!("{filter_name}: expected a list, got {:?}", other)),
+    }
+}
+
+pub fn trim(value: RuleValue) -> Result<RuleValue> {
+    map_string_or_list(value, "trim", |s| RuleValue::Str(s.trim().to_string()))
 }
 
 pub fn lines(value: RuleValue) -> Result<RuleValue> {
@@ -28,62 +60,25 @@ pub fn lines(value: RuleValue) -> Result<RuleValue> {
 }
 
 pub fn field(value: RuleValue, n: usize) -> Result<RuleValue> {
-    match value {
-        RuleValue::Str(s) => {
-            let fields: Vec<&str> = s.split_whitespace().collect();
-            Ok(fields
-                .get(n)
-                .map_or(RuleValue::Null, |f| RuleValue::Str(f.to_string())))
-        }
-        RuleValue::List(v) => Ok(RuleValue::List(
-            v.into_iter()
-                .map(|item| match item {
-                    RuleValue::Str(s) => {
-                        let fields: Vec<&str> = s.split_whitespace().collect();
-                        fields
-                            .get(n)
-                            .map_or(RuleValue::Null, |f| RuleValue::Str(f.to_string()))
-                    }
-                    other => other,
-                })
-                .collect(),
-        )),
-        other => Err(anyhow!("field: expected a string or list, got {:?}", other)),
-    }
+    map_string_or_list(value, "field", |s| {
+        let fields: Vec<&str> = s.split_whitespace().collect();
+        fields
+            .get(n)
+            .map_or(RuleValue::Null, |f| RuleValue::Str(f.to_string()))
+    })
 }
 
 pub fn prefix_strip(value: RuleValue, prefix: &str) -> Result<RuleValue> {
-    match value {
-        RuleValue::Str(s) => Ok(RuleValue::Str(
-            s.strip_prefix(prefix).unwrap_or(&s).to_string(),
-        )),
-        RuleValue::List(v) => Ok(RuleValue::List(
-            v.into_iter()
-                .map(|item| match item {
-                    RuleValue::Str(s) => {
-                        RuleValue::Str(s.strip_prefix(prefix).unwrap_or(&s).to_string())
-                    }
-                    other => other,
-                })
-                .collect(),
-        )),
-        other => Err(anyhow!(
-            "prefix_strip: expected a string or list, got {:?}",
-            other
-        )),
-    }
+    map_string_or_list(value, "prefix_strip", |s| {
+        RuleValue::Str(s.strip_prefix(prefix).unwrap_or(s).to_string())
+    })
 }
 
 pub fn starts_with(value: RuleValue, prefix: &str) -> Result<RuleValue> {
     match value {
-        RuleValue::List(v) => Ok(RuleValue::List(
-            v.into_iter()
-                .filter(|item| match item {
-                    RuleValue::Str(s) => s.starts_with(prefix),
-                    _ => false,
-                })
-                .collect(),
-        )),
+        RuleValue::List(_) => {
+            filter_string_list(value, "starts_with", false, |s| s.starts_with(prefix))
+        }
         RuleValue::Str(s) => Ok(if s.starts_with(prefix) {
             RuleValue::Str(s)
         } else {
@@ -108,17 +103,7 @@ pub fn contains(value: &RuleValue, substring: &str) -> Result<RuleValue> {
 }
 
 pub fn reject_contains(value: RuleValue, substring: &str) -> Result<RuleValue> {
-    match value {
-        RuleValue::List(v) => Ok(RuleValue::List(
-            v.into_iter()
-                .filter(|item| match item {
-                    RuleValue::Str(s) => !s.contains(substring),
-                    _ => true,
-                })
-                .collect(),
-        )),
-        other => Err(anyhow!("reject_contains: expected a list, got {:?}", other)),
-    }
+    filter_string_list(value, "reject_contains", true, |s| !s.contains(substring))
 }
 
 /// Case-insensitive `contains`.
@@ -129,14 +114,9 @@ pub fn reject_contains(value: RuleValue, substring: &str) -> Result<RuleValue> {
 pub fn icontains(value: RuleValue, substring: &str) -> Result<RuleValue> {
     let lower_sub = substring.to_lowercase();
     match value {
-        RuleValue::List(v) => Ok(RuleValue::List(
-            v.into_iter()
-                .filter(|item| match item {
-                    RuleValue::Str(s) => s.to_lowercase().contains(&lower_sub),
-                    _ => false,
-                })
-                .collect(),
-        )),
+        RuleValue::List(_) => filter_string_list(value, "icontains", false, |s| {
+            s.to_lowercase().contains(&lower_sub)
+        }),
         RuleValue::Str(s) => Ok(RuleValue::Bool(s.to_lowercase().contains(&lower_sub))),
         _ => Ok(RuleValue::Bool(false)),
     }
