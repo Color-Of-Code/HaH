@@ -1,7 +1,6 @@
 use hah_checks::{
     apt::{LegacySourcesFormatCheck, UserDefinedPackageCheck},
     boot::InitramfsCheck,
-    drift::OldCrashDumpsCheck,
     network::{LegacyNetworkInterfacesCheck, NtpConflictCheck, ResolvedConfigCheck},
     snap::SnapAptDuplicateCheck,
 };
@@ -38,7 +37,6 @@ pub(crate) fn all_checks(config: &Config) -> Vec<Box<dyn Check>> {
         Box::new(LegacySourcesFormatCheck),
         Box::new(UserDefinedPackageCheck),
         Box::new(SnapAptDuplicateCheck),
-        Box::new(OldCrashDumpsCheck),
         Box::new(NtpConflictCheck),
         Box::new(LegacyNetworkInterfacesCheck),
         Box::new(ResolvedConfigCheck),

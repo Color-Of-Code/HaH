@@ -1,0 +1,22 @@
+rules:
+  - id: old-crash-dumps
+    title: Old crash dumps and core files
+    triggers:
+      - name: old_files
+        capability:
+          type: old_files
+          paths: []
+          older_than_days: 30
+    conditions:
+      - type: for_each
+        source: "$old_files"
+        item_var: file
+        severity: Info
+    outcome:
+      finding_id: "crash-dump-{file}"
+      title: "Old crash dump: {file}"
+      description: "{file} is older than 30 days and can likely be removed."
+      remediation:
+        description: Remove old crash dump.
+        commands:
+          - "sudo rm {file}"
