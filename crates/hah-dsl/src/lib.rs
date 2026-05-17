@@ -1,4 +1,4 @@
-pub mod capabilities;
+pub mod caps_bridge;
 pub mod expr;
 pub mod filters;
 pub mod parsers;

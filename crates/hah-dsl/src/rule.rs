@@ -16,7 +16,7 @@ use hah_core::{
 };
 
 use crate::{
-    capabilities,
+    caps_bridge,
     pipeline::{RuleValue, ValueMap, eval_expr, render_template},
 };
 
@@ -571,29 +571,7 @@ impl RuleBasedCheck {
 // ── Capability dispatch ───────────────────────────────────────────────────────
 
 fn dispatch_capability(spec: &CapabilitySpec, ctx: &Context) -> Result<RuleValue> {
-    match spec {
-        CapabilitySpec::JournalUsage => capabilities::journal_usage_mb(ctx.runner.as_ref()),
-        CapabilitySpec::OldFiles {
-            paths,
-            older_than_days,
-        } => capabilities::old_files(paths, *older_than_days),
-        CapabilitySpec::BrokenSymlinks { paths } => capabilities::broken_symlinks(paths),
-        CapabilitySpec::SysctlConflicts { paths } => capabilities::sysctl_conflicts(paths),
-        CapabilitySpec::KernelInventory => capabilities::kernel_inventory(ctx.runner.as_ref()),
-        CapabilitySpec::StaleKernelHeaders => {
-            capabilities::stale_kernel_headers(ctx.runner.as_ref())
-        }
-        CapabilitySpec::LargeInitramfs { threshold_mb } => {
-            capabilities::large_initramfs(*threshold_mb)
-        }
-        CapabilitySpec::LegacyAptSources => capabilities::legacy_apt_sources(),
-        CapabilitySpec::LegacyNetworkInterfaces => {
-            capabilities::legacy_network_interfaces(ctx.runner.as_ref())
-        }
-        CapabilitySpec::InstalledDenylist => {
-            capabilities::installed_denylist(ctx.runner.as_ref(), &ctx.config.denylist.packages)
-        }
-    }
+    caps_bridge::dispatch(spec, ctx)
 }
 
 fn run_probe(spec: &ProbeSpec, ctx: &Context) -> RuleValue {

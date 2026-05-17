@@ -2,12 +2,14 @@
 
 ## Crate Layout
 
-HaH is a Cargo workspace with three crates:
+HaH is a Cargo workspace with four library crates and one binary:
 
 ```
 hah          (binary)   CLI entry point, check registry, argument parsing
 hah-core     (library)  Data model, Check trait, Config, output renderers, distro detection
-hah-dsl      (library)  YAML rule engine: pipeline evaluator, rule loader, capabilities
+hah-dsl      (library)  YAML rule engine: pipeline evaluator, rule loader
+hah-caps     (library)  Capability implementations: system queries (apt, files, kernel, …)
+hah-utils    (library)  Low-level shared utilities and library facades
 ```
 
 ### Dependency graph
@@ -15,10 +17,15 @@ hah-dsl      (library)  YAML rule engine: pipeline evaluator, rule loader, capab
 ```
 hah
  ├── hah-core
- └── hah-dsl  ── hah-core
+ └── hah-dsl
+      ├── hah-core
+      ├── hah-caps ── hah-core, hah-utils
+      └── hah-utils
 ```
 
-All checks are declarative YAML rules backed by capabilities in `hah-dsl`.
+All checks are declarative YAML rules. The DSL crate handles rule parsing and
+pipeline evaluation; `hah-caps` provides the data-gathering capabilities that
+rules reference via `capability:` triggers.
 
 ---
 
@@ -58,9 +65,11 @@ All checks are YAML rules. Drop a `.yaml` file in `rules/` (for the default ship
 any directory listed in `rule_dirs` in your config. See [docs/dsl.md](dsl.md) for the full
 language reference.
 
-For complex data-gathering logic, add a capability function in
-`crates/hah-dsl/src/capabilities.rs`, register a `CapabilitySpec` variant in `rule.rs`, and
-reference it from the YAML rule via `capability: { type: my_capability }`.
+For complex data-gathering logic, add a capability function in the `hah-caps`
+crate (one file per module, e.g. `crates/hah-caps/src/kernel.rs`), register a
+`CapabilitySpec` variant in `hah-dsl/src/rule.rs`, wire it in
+`hah-dsl/src/caps_bridge.rs`, and reference it from the YAML rule via
+`capability: { type: my_capability }`.
 
 ---
 

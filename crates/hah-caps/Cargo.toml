@@ -1,5 +1,5 @@
 [package]
-name = "hah-dsl"
+name = "hah-caps"
 version = "0.1.0"
 edition = "2024"
 
@@ -7,15 +7,12 @@ edition = "2024"
 workspace = true
 
 [dependencies]
-hah-caps = { path = "../hah-caps" }
 hah-core = { path = "../hah-core" }
 hah-utils = { path = "../hah-utils" }
 anyhow = "1"
-regex = "1"
-serde = { version = "1", features = ["derive"] }
-winnow = "1.0.3"
 
 [dev-dependencies]
 hah-core = { path = "../hah-core", features = ["mock"] }
 mockall = { workspace = true }
 tempfile = "3"
+filetime = "0.2"

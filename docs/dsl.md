@@ -1,9 +1,9 @@
 # HaH DSL — Declarative Rule Language
 
 Rules let you define checks in YAML without writing Rust. Rust provides reusable primitives
-(capabilities, parsers, pipeline filters); YAML composes them into policy. Use the DSL for
-straightforward command/probe checks and for wiring up built-in capabilities. Use a compiled
-`Check` implementation when logic is too complex or performance-sensitive for YAML.
+(capabilities in `hah-caps`, parsers and pipeline filters in `hah-dsl`); YAML composes them
+into policy. Use the DSL for straightforward command/probe checks and for wiring up built-in
+capabilities.
 
 ---
 

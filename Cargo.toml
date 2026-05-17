@@ -2,6 +2,7 @@
 members = [
     "crates/hah",
     "crates/hah-core",
+    "crates/hah-caps",
     "crates/hah-dsl",
     "crates/hah-utils",
 ]
