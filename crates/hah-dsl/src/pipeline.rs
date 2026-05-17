@@ -488,6 +488,10 @@ fn apply_string_filter(value: RuleValue, filter: &Filter) -> Result<RuleValue> {
     }
 }
 
+pub fn apply_filter_public(value: RuleValue, filter: &Filter) -> Result<RuleValue> {
+    apply_filter(value, filter)
+}
+
 fn apply_filter(value: RuleValue, filter: &Filter) -> Result<RuleValue> {
     match filter {
         Filter::Trim
@@ -519,23 +523,12 @@ pub fn eval_pipeline(pipeline: &Pipeline, values: &ValueMap) -> Result<RuleValue
     Ok(current)
 }
 
-/// Evaluate an expression that is either a pipeline, a bare `$varname`, or a
-/// literal value (integer, boolean keyword, or string).
+/// Evaluate an expression using the new strongly typed engine.
 pub fn eval_expr(expr: &str, values: &ValueMap) -> Result<RuleValue> {
-    let expr = expr.trim();
-    if expr.contains('|') {
-        eval_pipeline(&parse_pipeline(expr)?, values)
-    } else if let Some(key) = expr.strip_prefix('$') {
-        Ok(values.get(key).cloned().unwrap_or(RuleValue::Null))
-    } else if let Ok(n) = expr.parse::<i64>() {
-        Ok(RuleValue::Int(n))
-    } else if expr == "true" {
-        Ok(RuleValue::Bool(true))
-    } else if expr == "false" {
-        Ok(RuleValue::Bool(false))
-    } else {
-        Ok(RuleValue::Str(expr.to_string()))
-    }
+    let mut input = expr.trim();
+    let ast = crate::parser::parse_eval_expr(&mut input)
+        .map_err(|e| anyhow!("Failed to parse expression {:?}: {}", expr, e))?;
+    ast.eval(values)
 }
 
 /// Substitute `{varname}` placeholders in a template string using the value map.

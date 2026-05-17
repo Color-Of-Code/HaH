@@ -12,6 +12,7 @@ hah-utils = { path = "../hah-utils" }
 anyhow = "1"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
+winnow = "1.0.3"
 
 [dev-dependencies]
 hah-core = { path = "../hah-core", features = ["mock"] }
