@@ -1,4 +1,4 @@
-.PHONY: all setup fmt fmt-check lint test audit coverage coverage-ci metrics check doc-dependencies
+.PHONY: all setup fmt fmt-check lint test audit coverage coverage-ci metrics check doc-dependencies validate
 
 # Configuration for quality gates
 COVERAGE_MIN_THRESHOLD ?= 95
@@ -47,5 +47,8 @@ doc-dependencies:
 check-dependencies:
 	cargo run --manifest-path tools/hah-deps/Cargo.toml --release --quiet -- --check
 
-check: fmt-check lint test audit coverage-ci metrics check-dependencies
+validate:
+	cargo run -p hah --quiet -- validate rules/
+
+check: fmt-check lint test audit coverage-ci metrics validate check-dependencies
 

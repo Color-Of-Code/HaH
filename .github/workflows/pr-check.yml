@@ -41,3 +41,6 @@ jobs:
 
       - name: Code metrics
         run: make metrics
+
+      - name: Validate rules
+        run: make validate
