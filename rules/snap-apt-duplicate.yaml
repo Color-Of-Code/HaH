@@ -18,11 +18,11 @@ rules:
       snap_names: "$snap_list | field(0)"
       duplicates: "$snap_names | intersect($apt_list) | reject_contains('snapd') | reject_in($config.allowlist.packages)"
     conditions:
-      - type: for_each
-        source: "$duplicates"
-        item_var: pkg
-        severity: Warning
+      - warning: "$duplicates"
     outcome:
+      for_each:
+        list: "$duplicates"
+        as: pkg
       finding_id: "snap-apt-dup-{pkg}"
       title: "'{pkg}' is installed via both APT and Snap"
       description: "Having '{pkg}' installed twice wastes space and may cause version conflicts or confusion."

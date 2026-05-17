@@ -11,12 +11,12 @@ rules:
           type: installed_denylist
 
     conditions:
-      - type: for_each
-        source: "{{ denied }}"
-        item_var: entry
-        severity: Warning
+      - warning: "$denied"
 
     outcome:
+      for_each:
+        list: "$denied"
+        as: entry
       finding_id: "user-denylist-{{ entry }}"
       title: "Denylisted package installed: {{ entry }}"
       description: >-

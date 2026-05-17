@@ -8,11 +8,11 @@ rules:
           paths: []
           older_than_days: 30
     conditions:
-      - type: for_each
-        source: "$old_files"
-        item_var: file
-        severity: Info
+      - info: "$old_files"
     outcome:
+      for_each:
+        list: "$old_files"
+        as: file
       finding_id: "crash-dump-{file}"
       title: "Old crash dump: {file}"
       description: "{file} is older than 30 days and can likely be removed."

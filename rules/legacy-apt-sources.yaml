@@ -11,12 +11,12 @@ rules:
           type: legacy_apt_sources
 
     conditions:
-      - type: for_each
-        source: "{{ legacy_files }}"
-        item_var: file
-        severity: Info
+      - info: "$legacy_files"
 
     outcome:
+      for_each:
+        list: "$legacy_files"
+        as: file
       finding_id: "legacy-sources-format-{{ file }}"
       title: "Legacy one-line APT source: {{ file }}"
       description: >-

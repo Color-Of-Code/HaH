@@ -7,11 +7,11 @@ rules:
           type: large_initramfs
           threshold_mb: 100
     conditions:
-      - type: for_each
-        source: "$large_images"
-        item_var: entry
-        severity: Warning
+      - warning: "$large_images"
     outcome:
+      for_each:
+        list: "$large_images"
+        as: entry
       finding_id: "initramfs-large-{entry}"
       title: "Oversized initramfs: {entry} MB"
       description: >-

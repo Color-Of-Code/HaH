@@ -189,7 +189,6 @@ values:
 | `regex_match` | Match a string against a regular expression |
 | `all` | Logical AND of a list of child conditions |
 | `any` | Logical OR of a list of child conditions |
-| `for_each` | Iterate over a list and produce one finding per item |
 
 Every condition requires a `severity` (`Info`, `Warning`, or `Critical`).
 
@@ -323,6 +322,30 @@ outcome:
 
 Use `{variable}` placeholders in `title`, `description`, and remediation `description`. All
 `values:` and trigger names are available for substitution.
+
+### Per-item iteration (`for_each`)
+
+When a condition fires on a list, produce one finding per item instead of a single finding:
+
+```yaml
+conditions:
+  - warning: "$duplicates"
+
+outcome:
+  for_each:
+    list: "$duplicates"
+    as: pkg
+  finding_id: "snap-apt-dup-{pkg}"
+  title: "'{pkg}' is installed via both APT and Snap"
+  description: "Having '{pkg}' installed twice wastes space."
+  remediation:
+    description: Remove the APT version if the Snap is preferred.
+    commands:
+      - "sudo apt remove --purge {pkg}"
+```
+
+The `{item_var}` placeholder (here `{pkg}`) is available in all outcome template fields.
+Without `for_each`, a single finding is emitted when the condition fires.
 
 ---
 
