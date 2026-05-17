@@ -204,11 +204,13 @@ conditions:
   - critical: "$free_mb < 50"             # numeric threshold (lt)
   - info: "$enabled == true"              # boolean equality
   - warning: "$status != true"            # boolean inequality (becomes equals false)
-  - warning: "$status =~ '^overlap:'"     # regex match
+  - warning: '$status =~ "^overlap:"'     # regex match
+  - info: '$family == "debian"'           # string equality
 ```
 
 Supported operators: `>`, `>=`, `<`, `<=`, `==`, `!=`, `=~`. When no operator is present, the
-expression is treated as a `non_empty` check on the pipeline result.
+expression is treated as a `non_empty` check on the pipeline result. Quoted RHS with `==`
+produces a string equality check; unquoted RHS produces a numeric comparison.
 
 Use `all:` and `any:` to combine conditions. Severity is auto-derived as the maximum severity
 of the children:
@@ -220,62 +222,6 @@ conditions:
       - any:
           - warning: "$chrony_active == true"
           - warning: "$timesyncd_active == true"
-```
-
-### Inferred syntax
-
-Omit the `type:` field and let HaH infer the condition type from the fields present:
-
-```yaml
-conditions:
-  - value: "$free_bytes"
-    operator: lt
-    threshold: "$threshold_bytes"
-    severity: Critical
-
-  - value: "$ntp_installed"
-    expected: true
-    severity: Warning
-
-  - value: "$packages"
-    severity: Info
-
-  - value: "$line"
-    pattern: "^COMPRESS=lz4"
-    severity: Info
-```
-
-### Typed syntax (explicit)
-
-Use `type:` for full control or when combining conditions with `all`/`any`:
-
-```yaml
-conditions:
-  - type: numeric_threshold
-    value: "$free_bytes"
-    operator: lt
-    threshold: "$threshold_bytes"
-    severity: Critical
-
-  - type: for_each
-    source: "$duplicates"
-    item_var: pkg
-    severity: Warning
-
-  - type: all
-    severity: Warning
-    conditions:
-      - type: equals
-        value: "$ntp_installed"
-        expected: true
-      - type: any
-        conditions:
-          - type: equals
-            value: "$chrony_active"
-            expected: true
-          - type: equals
-            value: "$timesyncd_active"
-            expected: true
 ```
 
 ---

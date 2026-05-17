@@ -304,150 +304,9 @@ impl RuleCondition {
 
 // ── Custom Deserialize for RuleCondition ──────────────────────────────────────
 //
-// Supports three input formats (tried in order):
-// 1. Compact:  `{ info: "$x > 0" }` — severity key maps to expression string
-// 2. Typed:    `{ type: numeric_threshold, value: ..., ... }` — existing format
-// 3. Inferred: `{ value: ..., operator: ..., threshold: ..., severity: ... }` —
-//              auto-detects variant from which fields are present
-
-/// Internal typed condition (mirrors `RuleCondition` with serde tag).
-#[derive(Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-enum TypedCondition {
-    NumericThreshold {
-        value: String,
-        operator: CompareOp,
-        threshold: String,
-        severity: Severity,
-    },
-    Equals {
-        value: String,
-        expected: ExpectedValue,
-        severity: Severity,
-    },
-    NonEmpty {
-        value: String,
-        severity: Severity,
-    },
-    RegexMatch {
-        value: String,
-        pattern: String,
-        severity: Severity,
-    },
-    All {
-        conditions: Vec<RuleCondition>,
-        severity: Severity,
-    },
-    Any {
-        conditions: Vec<RuleCondition>,
-        severity: Severity,
-    },
-}
-
-impl From<TypedCondition> for RuleCondition {
-    fn from(tc: TypedCondition) -> Self {
-        match tc {
-            TypedCondition::NumericThreshold {
-                value,
-                operator,
-                threshold,
-                severity,
-            } => Self::NumericThreshold {
-                value,
-                operator,
-                threshold,
-                severity,
-            },
-            TypedCondition::Equals {
-                value,
-                expected,
-                severity,
-            } => Self::Equals {
-                value,
-                expected,
-                severity,
-            },
-            TypedCondition::NonEmpty { value, severity } => Self::NonEmpty { value, severity },
-            TypedCondition::RegexMatch {
-                value,
-                pattern,
-                severity,
-            } => Self::RegexMatch {
-                value,
-                pattern,
-                severity,
-            },
-            TypedCondition::All {
-                conditions,
-                severity,
-            } => Self::All {
-                conditions,
-                severity,
-            },
-            TypedCondition::Any {
-                conditions,
-                severity,
-            } => Self::Any {
-                conditions,
-                severity,
-            },
-        }
-    }
-}
-
-/// Flat struct for inferred conditions (auto-detect variant from fields).
-#[derive(Deserialize)]
-struct InferredCondition {
-    severity: Severity,
-    #[serde(default)]
-    value: Option<String>,
-    #[serde(default)]
-    operator: Option<CompareOp>,
-    #[serde(default)]
-    threshold: Option<String>,
-    #[serde(default)]
-    expected: Option<ExpectedValue>,
-    #[serde(default)]
-    pattern: Option<String>,
-}
-
-impl InferredCondition {
-    fn into_rule_condition(self) -> std::result::Result<RuleCondition, String> {
-        if let Some(op) = self.operator {
-            let value = self.value.ok_or("operator requires 'value'")?;
-            let threshold = self.threshold.ok_or("operator requires 'threshold'")?;
-            return Ok(RuleCondition::NumericThreshold {
-                value,
-                operator: op,
-                threshold,
-                severity: self.severity,
-            });
-        }
-        if let Some(expected) = self.expected {
-            let value = self.value.ok_or("expected requires 'value'")?;
-            return Ok(RuleCondition::Equals {
-                value,
-                expected,
-                severity: self.severity,
-            });
-        }
-        if let Some(pattern) = self.pattern {
-            let value = self.value.ok_or("pattern requires 'value'")?;
-            return Ok(RuleCondition::RegexMatch {
-                value,
-                pattern,
-                severity: self.severity,
-            });
-        }
-        if let Some(value) = self.value {
-            return Ok(RuleCondition::NonEmpty {
-                value,
-                severity: self.severity,
-            });
-        }
-        Err("cannot infer condition type: no recognisable fields".into())
-    }
-}
+// Only the compact format is supported:
+//   - `{ info: "$x > 0" }` / `{ warning: "$list" }` / `{ critical: "..." }`
+//   - `{ all: [...] }` / `{ any: [...] }`
 
 /// Compact condition: `{ info: "$x > 0" }` / `{ warning: "$list" }` /
 /// `{ all: [...] }` / `{ any: [...] }` etc.
@@ -466,14 +325,6 @@ struct CompactCondition {
 }
 
 impl CompactCondition {
-    fn is_some(&self) -> bool {
-        self.info.is_some()
-            || self.warning.is_some()
-            || self.critical.is_some()
-            || self.all.is_some()
-            || self.any.is_some()
-    }
-
     fn into_rule_condition(self) -> std::result::Result<RuleCondition, String> {
         if let Some(conditions) = self.all {
             let severity = max_severity(&conditions)?;
@@ -545,6 +396,27 @@ fn build_from_compact_expr(
             {
                 return Ok(cond);
             }
+            // Check for quoted string equality: `$x == "hello"`
+            if matches!(op, CompareToken::Eq | CompareToken::Neq) && is_quoted(&rhs) {
+                let s = strip_quotes(&rhs);
+                let expected = if op == CompareToken::Eq {
+                    ExpectedValue::Str(s)
+                } else {
+                    // != "str" not directly expressible as Equals; fall through
+                    // to numeric (will error at runtime for non-numeric).
+                    return Ok(RuleCondition::NumericThreshold {
+                        value: lhs,
+                        operator: compare_token_to_op(op),
+                        threshold: rhs,
+                        severity,
+                    });
+                };
+                return Ok(RuleCondition::Equals {
+                    value: lhs,
+                    expected,
+                    severity,
+                });
+            }
             Ok(RuleCondition::NumericThreshold {
                 value: lhs,
                 operator: compare_token_to_op(op),
@@ -567,6 +439,12 @@ fn strip_quotes(s: &str) -> String {
     } else {
         s.to_string()
     }
+}
+
+/// Returns true if the string is surrounded by quotes.
+fn is_quoted(s: &str) -> bool {
+    let s = s.trim();
+    (s.starts_with('"') && s.ends_with('"')) || (s.starts_with('\'') && s.ends_with('\''))
 }
 
 fn try_bool_equals(
@@ -600,28 +478,9 @@ impl<'de> Deserialize<'de> for RuleCondition {
         D: serde::Deserializer<'de>,
     {
         use serde::de::Error;
-        use serde_value::{DeserializerError, ValueDeserializer};
 
-        type VD = ValueDeserializer<DeserializerError>;
-
-        // Use serde_value to buffer the input so we can try multiple formats.
-        let value = serde_value::Value::deserialize(deserializer)?;
-
-        // 1. Try typed (has `type` field) — most specific, try first.
-        if let Ok(typed) = TypedCondition::deserialize(VD::new(value.clone())) {
-            return Ok(RuleCondition::from(typed));
-        }
-
-        // 2. Try compact (`{ info: "..." }` / `{ all: [...] }` / ...).
-        if let Ok(compact) = CompactCondition::deserialize(VD::new(value.clone()))
-            && compact.is_some()
-        {
-            return compact.into_rule_condition().map_err(D::Error::custom);
-        }
-
-        // 3. Try inferred (flat struct, no `type` field).
-        let inferred = InferredCondition::deserialize(VD::new(value)).map_err(D::Error::custom)?;
-        inferred.into_rule_condition().map_err(D::Error::custom)
+        let compact = CompactCondition::deserialize(deserializer)?;
+        compact.into_rule_condition().map_err(D::Error::custom)
     }
 }
 
@@ -1113,9 +972,7 @@ rules:
     title: Test rule
     triggers: []
     conditions:
-      - type: non_empty
-        value: "$nothing"
-        severity: Info
+      - info: "$nothing"
     outcome:
       finding_id: test
       title: "Test finding"
@@ -1153,9 +1010,7 @@ rules:
   - id: x
     title: X
     conditions:
-      - type: non_empty
-        value: "$items"
-        severity: Warning
+      - warning: "$items"
     outcome:
       finding_id: x
       title: "found"
@@ -1175,9 +1030,7 @@ rules:
   - id: x
     title: X
     conditions:
-      - type: non_empty
-        value: "$items"
-        severity: Warning
+      - warning: "$items"
     outcome:
       finding_id: x
       title: "found"
@@ -1204,11 +1057,7 @@ rules:
   - id: x
     title: X
     conditions:
-      - type: numeric_threshold
-        value: "$free"
-        operator: lt
-        threshold: "100"
-        severity: Critical
+      - critical: "$free < 100"
     outcome:
       finding_id: x
       title: "low"
@@ -1232,11 +1081,7 @@ rules:
   - id: x
     title: X
     conditions:
-      - type: numeric_threshold
-        value: "$free"
-        operator: lt
-        threshold: "100"
-        severity: Critical
+      - critical: "$free < 100"
     outcome:
       finding_id: x
       title: "low"
@@ -1297,11 +1142,7 @@ rules:
           args: []
         transform: "$stdout | lines | nth(1) | trim | number | bytes_to_mb"
     conditions:
-      - type: numeric_threshold
-        value: "$free_mb"
-        operator: lt
-        threshold: "50"
-        severity: Critical
+      - critical: "$free_mb < 50"
     outcome:
       finding_id: x
       title: "{free_mb} MB"
@@ -1337,9 +1178,7 @@ rules:
     only_if:
       distro_family: debian
     conditions:
-      - type: non_empty
-        value: "$nothing"
-        severity: Warning
+      - warning: "$nothing"
     outcome:
       finding_id: x
       title: ""
@@ -1436,9 +1275,7 @@ rules:
           type: sysctl_conflicts
           paths: ["/nonexistent/sysctl.d"]
     conditions:
-      - type: non_empty
-        value: "$conflicts"
-        severity: Warning
+      - warning: "$conflicts"
     outcome: { finding_id: x, title: "", description: "" }
 "#,
         );
@@ -1471,17 +1308,7 @@ rules:
 
     fn make_equals_check(expected_yaml: &str) -> RuleBasedCheck {
         make_check(&format!(
-            r#"
-rules:
-  - id: x
-    title: X
-    conditions:
-      - type: equals
-        value: "$val"
-        expected: {expected_yaml}
-        severity: Warning
-    outcome: {{ finding_id: x, title: "", description: "" }}
-"#
+            "rules:\n  - id: x\n    title: X\n    conditions:\n      - warning: '$val == {expected_yaml}'\n    outcome: {{ finding_id: x, title: \"\", description: \"\" }}\n"
         ))
     }
 
@@ -1525,17 +1352,9 @@ rules:
   - id: x
     title: X
     conditions:
-      - type: all
-        conditions:
-          - type: equals
-            value: "$a"
-            expected: true
-            severity: Info
-          - type: equals
-            value: "$b"
-            expected: true
-            severity: Info
-        severity: Warning
+      - all:
+          - info: "$a == true"
+          - info: "$b == true"
     outcome: { finding_id: x, title: "", description: "" }
 "#;
 
@@ -1544,17 +1363,9 @@ rules:
   - id: x
     title: X
     conditions:
-      - type: any
-        conditions:
-          - type: equals
-            value: "$a"
-            expected: true
-            severity: Info
-          - type: equals
-            value: "$b"
-            expected: true
-            severity: Info
-        severity: Warning
+      - any:
+          - info: "$a == true"
+          - info: "$b == true"
     outcome: { finding_id: x, title: "", description: "" }
 "#;
 
@@ -1604,10 +1415,7 @@ rules:
   - id: x
     title: X
     conditions:
-      - type: regex_match
-        value: "$val"
-        pattern: "^foo.*"
-        severity: Info
+      - info: '$val =~ "^foo.*"'
     outcome: { finding_id: x, title: "", description: "" }
 "#,
         );
@@ -1632,10 +1440,7 @@ rules:
   - id: x
     title: X
     conditions:
-      - type: regex_match
-        value: "$val"
-        pattern: "[invalid"
-        severity: Info
+      - info: '$val =~ "[invalid"'
     outcome: { finding_id: x, title: "", description: "" }
 "#,
         );
@@ -1654,10 +1459,7 @@ rules:
   - id: x
     title: X
     conditions:
-      - type: regex_match
-        value: "$val"
-        pattern: "legacy"
-        severity: Warning
+      - warning: '$val =~ "legacy"'
     outcome: { finding_id: x, title: "Legacy found", description: "" }
 "#,
         );
@@ -1684,11 +1486,7 @@ rules:
   - id: x
     title: X
     conditions:
-      - type: numeric_threshold
-        value: "$val"
-        operator: {op}
-        threshold: "10"
-        severity: Info
+      - info: "$val {op} 10"
     outcome: {{ finding_id: x, title: "", description: "" }}
 "#
         ))
@@ -1705,23 +1503,23 @@ rules:
 
     #[test]
     fn numeric_threshold_all_operators() {
-        assert!(eval_numeric("lt", 5)); // 5 < 10
-        assert!(!eval_numeric("lt", 10)); // 10 < 10 = false
-        assert!(eval_numeric("lte", 10)); // 10 <= 10
-        assert!(!eval_numeric("lte", 11)); // 11 <= 10 = false
-        assert!(eval_numeric("gt", 15)); // 15 > 10
-        assert!(!eval_numeric("gt", 5)); // 5 > 10 = false
-        assert!(eval_numeric("gte", 10)); // 10 >= 10
-        assert!(!eval_numeric("gte", 5)); // 5 >= 10 = false
-        assert!(eval_numeric("eq", 10)); // 10 == 10
-        assert!(!eval_numeric("eq", 5)); // 5 == 10 = false
-        assert!(eval_numeric("neq", 5)); // 5 != 10
-        assert!(!eval_numeric("neq", 10)); // 10 != 10 = false
+        assert!(eval_numeric("<", 5)); // 5 < 10
+        assert!(!eval_numeric("<", 10)); // 10 < 10 = false
+        assert!(eval_numeric("<=", 10)); // 10 <= 10
+        assert!(!eval_numeric("<=", 11)); // 11 <= 10 = false
+        assert!(eval_numeric(">", 15)); // 15 > 10
+        assert!(!eval_numeric(">", 5)); // 5 > 10 = false
+        assert!(eval_numeric(">=", 10)); // 10 >= 10
+        assert!(!eval_numeric(">=", 5)); // 5 >= 10 = false
+        assert!(eval_numeric("==", 10)); // 10 == 10
+        assert!(!eval_numeric("==", 5)); // 5 == 10 = false
+        assert!(eval_numeric("!=", 5)); // 5 != 10
+        assert!(!eval_numeric("!=", 10)); // 10 != 10 = false
     }
 
     #[test]
     fn numeric_threshold_non_numeric_value_returns_error() {
-        let check = make_numeric_check("lt");
+        let check = make_numeric_check("<");
         let mut values = HashMap::new();
         values.insert("val".into(), RuleValue::Str("not-a-number".into()));
         assert!(
@@ -1818,10 +1616,7 @@ rules:
           type: package_installed
           name: mypkg
     conditions:
-      - type: equals
-        value: "$installed"
-        expected: true
-        severity: Warning
+      - warning: "$installed == true"
     outcome: { finding_id: x, title: "installed", description: "" }
 "#;
 
@@ -1835,10 +1630,7 @@ rules:
           type: service_active
           name: mysvc
     conditions:
-      - type: equals
-        value: "$active"
-        expected: true
-        severity: Info
+      - info: "$active == true"
     outcome: { finding_id: x, title: "active", description: "" }
 "#;
 
@@ -1959,11 +1751,7 @@ rules:
   - id: x
     title: X
     conditions:
-      - type: numeric_threshold
-        value: "$config.boot_space_mb"
-        operator: gt
-        threshold: "0"
-        severity: Info
+      - info: "$config.boot_space_mb > 0"
     outcome: { finding_id: x, title: "low", description: "" }
 "#,
         );
@@ -2016,10 +1804,7 @@ rules:
   - id: x
     title: X
     conditions:
-      - type: equals
-        value: "$distro.family"
-        expected: "debian"
-        severity: Info
+      - info: '$distro.family == "debian"'
     outcome: { finding_id: x, title: "debian", description: "" }
 "#,
         );
@@ -2425,124 +2210,6 @@ rules:
             assert_eq!(*severity, Severity::Info);
         } else {
             panic!("expected RegexMatch, got {cond:?}");
-        }
-    }
-
-    // ── Inferred condition (no type: field) ───────────────────────────────────
-
-    #[test]
-    fn inferred_numeric_threshold() {
-        let yaml = r#"
-rules:
-  - id: t
-    title: T
-    conditions:
-      - value: "$count"
-        operator: gt
-        threshold: "0"
-        severity: Info
-    outcome:
-      finding_id: t
-      title: T
-      description: ""
-"#;
-        let check = make_check(yaml);
-        let cond = &check.rule.conditions[0];
-        assert!(matches!(cond, RuleCondition::NumericThreshold { .. }));
-    }
-
-    #[test]
-    fn inferred_equals() {
-        let yaml = r#"
-rules:
-  - id: t
-    title: T
-    conditions:
-      - value: "$active"
-        expected: true
-        severity: Warning
-    outcome:
-      finding_id: t
-      title: T
-      description: ""
-"#;
-        let check = make_check(yaml);
-        let cond = &check.rule.conditions[0];
-        assert!(matches!(cond, RuleCondition::Equals { .. }));
-    }
-
-    #[test]
-    fn inferred_non_empty() {
-        let yaml = r#"
-rules:
-  - id: t
-    title: T
-    conditions:
-      - value: "$items"
-        severity: Info
-    outcome:
-      finding_id: t
-      title: T
-      description: ""
-"#;
-        let check = make_check(yaml);
-        let cond = &check.rule.conditions[0];
-        assert!(matches!(cond, RuleCondition::NonEmpty { .. }));
-    }
-
-    #[test]
-    fn inferred_regex_match() {
-        let yaml = r#"
-rules:
-  - id: t
-    title: T
-    conditions:
-      - value: "$line"
-        pattern: "^error"
-        severity: Critical
-    outcome:
-      finding_id: t
-      title: T
-      description: ""
-"#;
-        let check = make_check(yaml);
-        let cond = &check.rule.conditions[0];
-        assert!(matches!(cond, RuleCondition::RegexMatch { .. }));
-    }
-
-    // ── Typed form (backward compat) still works ──────────────────────────────
-
-    #[test]
-    fn typed_all_with_nested_compact_conditions() {
-        let yaml = r#"
-rules:
-  - id: t
-    title: T
-    conditions:
-      - type: all
-        severity: Warning
-        conditions:
-          - type: equals
-            value: "$a"
-            expected: true
-            severity: Warning
-          - info: "$b > 5"
-    outcome:
-      finding_id: t
-      title: T
-      description: ""
-"#;
-        let check = make_check(yaml);
-        let cond = &check.rule.conditions[0];
-        if let RuleCondition::All { conditions, .. } = cond {
-            assert_eq!(conditions.len(), 2);
-            assert!(matches!(conditions[0], RuleCondition::Equals { .. }));
-            assert!(matches!(
-                conditions[1],
-                RuleCondition::NumericThreshold { .. }
-            ));
-        } else {
-            panic!("expected All, got {cond:?}");
         }
     }
 }
