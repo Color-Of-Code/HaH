@@ -140,21 +140,7 @@ pub fn render_template(template: &str, values: &ValueMap) -> String {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-
-    fn str_val(s: &str) -> RuleValue {
-        RuleValue::Str(s.to_string())
-    }
-
-    #[allow(dead_code)]
-    fn list_val(items: &[&str]) -> RuleValue {
-        RuleValue::List(items.iter().copied().map(str_val).collect())
-    }
-    fn map_of(pairs: &[(&str, RuleValue)]) -> ValueMap {
-        pairs
-            .iter()
-            .map(|(k, v)| ((*k).to_string(), v.clone()))
-            .collect()
-    }
+    use crate::testutil::{map_of, sv};
 
     // ── eval_expr ─────────────────────────────────────────────────────────────
 
@@ -191,14 +177,14 @@ mod tests {
 
     #[test]
     fn eval_expr_pipeline() {
-        let values = map_of(&[("out", str_val("  42  "))]);
+        let values = map_of(&[("out", sv("  42  "))]);
         let v = eval_expr("$out | trim | number", &values).unwrap();
         assert_eq!(v, RuleValue::Int(42));
     }
 
     #[test]
     fn eval_expr_pipeline_nth_and_trim() {
-        let values = map_of(&[("out", str_val("header\n  99  \n"))]);
+        let values = map_of(&[("out", sv("header\n  99  \n"))]);
         let v = eval_expr("$out | lines | nth(1) | trim | number", &values).unwrap();
         assert_eq!(v, RuleValue::Int(99));
     }
@@ -208,7 +194,7 @@ mod tests {
     #[test]
     fn render_template_substitutes_placeholders() {
         let values = map_of(&[
-            ("name", str_val("linux-image-5.15")),
+            ("name", sv("linux-image-5.15")),
             ("count", RuleValue::Int(3)),
         ]);
         let result = render_template("{count} package(s): {name}", &values);
@@ -230,7 +216,7 @@ mod tests {
         assert_eq!(RuleValue::Int(42).display(), "42");
         assert_eq!(RuleValue::Null.display(), "");
         assert_eq!(
-            RuleValue::List(vec![str_val("a"), RuleValue::Int(1)]).display(),
+            RuleValue::List(vec![sv("a"), RuleValue::Int(1)]).display(),
             "a, 1"
         );
     }

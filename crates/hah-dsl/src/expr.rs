@@ -125,14 +125,8 @@ fn str_arg_filter(name: &str, args: &[RuleValue]) -> Result<Option<Filter>> {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::testutil::map_of;
     use std::collections::HashMap;
-
-    fn map_of(pairs: &[(&str, RuleValue)]) -> ValueMap {
-        pairs
-            .iter()
-            .map(|(k, v)| ((*k).to_string(), v.clone()))
-            .collect()
-    }
 
     // ── Variable ──────────────────────────────────────────────────────────────
 

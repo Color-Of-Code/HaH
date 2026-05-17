@@ -125,13 +125,7 @@ pub fn reject_contains(value: RuleValue, substring: &str) -> Result<RuleValue> {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-
-    fn sv(s: &str) -> RuleValue {
-        RuleValue::Str(s.to_string())
-    }
-    fn list(items: &[&str]) -> RuleValue {
-        RuleValue::List(items.iter().copied().map(sv).collect())
-    }
+    use crate::testutil::{list, sv};
 
     #[test]
     fn trim_string() {
