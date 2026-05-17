@@ -239,6 +239,9 @@ pub enum CapabilitySpec {
         #[serde(default = "default_initramfs_threshold")]
         threshold_mb: u64,
     },
+    LegacyAptSources,
+    LegacyNetworkInterfaces,
+    InstalledDenylist,
 }
 
 fn default_initramfs_threshold() -> u64 {
@@ -584,6 +587,13 @@ fn dispatch_capability(spec: &CapabilitySpec, ctx: &Context) -> Result<RuleValue
         CapabilitySpec::NtpActiveServices => capabilities::ntp_active_services(ctx.runner.as_ref()),
         CapabilitySpec::LargeInitramfs { threshold_mb } => {
             capabilities::large_initramfs(*threshold_mb)
+        }
+        CapabilitySpec::LegacyAptSources => capabilities::legacy_apt_sources(),
+        CapabilitySpec::LegacyNetworkInterfaces => {
+            capabilities::legacy_network_interfaces(ctx.runner.as_ref())
+        }
+        CapabilitySpec::InstalledDenylist => {
+            capabilities::installed_denylist(ctx.runner.as_ref(), &ctx.config.denylist.packages)
         }
     }
 }

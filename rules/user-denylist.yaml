@@ -1,0 +1,27 @@
+rules:
+  - id: user-denylist
+    title: Packages matching user denylist
+
+    only_if:
+      distro_family: debian
+
+    triggers:
+      - name: denied
+        capability:
+          type: installed_denylist
+
+    conditions:
+      - type: for_each
+        source: "{{ denied }}"
+        item_var: entry
+        severity: Warning
+
+    outcome:
+      finding_id: "user-denylist-{{ entry }}"
+      title: "Denylisted package installed: {{ entry }}"
+      description: >-
+        A package from the configured denylist is installed: {{ entry }}.
+      remediation:
+        description: "Remove the denylisted package."
+        commands:
+          - "sudo apt remove --purge <package>"

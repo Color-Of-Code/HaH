@@ -1,0 +1,34 @@
+rules:
+  - id: legacy-network-interfaces
+    title: Legacy /etc/network/interfaces configuration
+
+    only_if:
+      require_files:
+        - /etc/network/interfaces
+
+    triggers:
+      - name: net_status
+        capability:
+          type: legacy_network_interfaces
+
+    conditions:
+      - type: regex_match
+        value: "{{ net_status }}"
+        pattern: "^overlap:"
+        severity: Warning
+      - type: regex_match
+        value: "{{ net_status }}"
+        pattern: "^legacy:"
+        severity: Info
+
+    outcome:
+      finding_id: legacy-network-interfaces
+      title: "/etc/network/interfaces has non-loopback entries"
+      description: >-
+        /etc/network/interfaces defines non-loopback interface(s) using the
+        legacy ifupdown format. Consider migrating to Netplan or NetworkManager.
+      remediation:
+        description: "Migrate interface configuration to Netplan or NetworkManager."
+        commands:
+          - "# Netplan reference: https://netplan.readthedocs.io/"
+          - "# After migration: sudo apt remove --purge ifupdown"

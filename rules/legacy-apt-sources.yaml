@@ -1,0 +1,28 @@
+rules:
+  - id: legacy-sources-format
+    title: Legacy one-line APT source entries
+
+    only_if:
+      distro_family: debian
+
+    triggers:
+      - name: legacy_files
+        capability:
+          type: legacy_apt_sources
+
+    conditions:
+      - type: for_each
+        source: "{{ legacy_files }}"
+        item_var: file
+        severity: Info
+
+    outcome:
+      finding_id: "legacy-sources-format-{{ file }}"
+      title: "Legacy one-line APT source: {{ file }}"
+      description: >-
+        {{ file }} uses the deprecated one-line `deb` format.
+        The modern DEB822 `.sources` format is preferred.
+      remediation:
+        description: "Convert to DEB822 format (one .sources file per repository)."
+        commands:
+          - "# See: https://wiki.debian.org/SourcesList#DEB822_format"

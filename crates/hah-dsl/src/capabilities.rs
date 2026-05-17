@@ -17,7 +17,7 @@ use std::{fs, path::Path};
 
 use anyhow::{Result, anyhow};
 
-use hah_core::runner::CommandRunner;
+use hah_core::{config::DenylistEntry, runner::CommandRunner};
 
 use crate::pipeline::RuleValue;
 
@@ -247,13 +247,146 @@ pub fn large_initramfs(threshold_mb: u64) -> Result<RuleValue> {
     Ok(RuleValue::List(large))
 }
 
+// ── LegacyAptSources ──────────────────────────────────────────────────────────
+
+/// Return a `List` of file paths using the legacy one-line `deb`/`deb-src`
+/// APT source format.
+///
+/// Checks `/etc/apt/sources.list` and all `*.list` files in
+/// `/etc/apt/sources.list.d/`.
+pub fn legacy_apt_sources() -> Result<RuleValue> {
+    collect_legacy_sources(
+        Path::new("/etc/apt/sources.list"),
+        Path::new("/etc/apt/sources.list.d"),
+    )
+}
+
+fn collect_legacy_sources(sources_list: &Path, sources_d: &Path) -> Result<RuleValue> {
+    let mut legacy: Vec<RuleValue> = Vec::new();
+
+    if sources_list.exists()
+        && fs::read_to_string(sources_list).is_ok_and(|content| {
+            content
+                .lines()
+                .any(|l| l.starts_with("deb ") || l.starts_with("deb-src "))
+        })
+    {
+        legacy.push(RuleValue::Str(sources_list.to_string_lossy().into_owned()));
+    }
+
+    if let Ok(entries) = fs::read_dir(sources_d) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("list")
+                && fs::read_to_string(&path).is_ok_and(|content| {
+                    content
+                        .lines()
+                        .any(|l| l.starts_with("deb ") || l.starts_with("deb-src "))
+                })
+            {
+                legacy.push(RuleValue::Str(path.to_string_lossy().into_owned()));
+            }
+        }
+    }
+
+    Ok(RuleValue::List(legacy))
+}
+
+// ── LegacyNetworkInterfaces ───────────────────────────────────────────────────
+
+/// Return a status string describing legacy `/etc/network/interfaces` state.
+///
+/// Returns:
+/// - `""` (empty) when no non-loopback entries exist or file is absent
+/// - `"overlap:<count>:<managers>"` when a modern manager is also active
+/// - `"legacy:<count>"` when only ifupdown is in use
+pub fn legacy_network_interfaces(runner: &dyn CommandRunner) -> Result<RuleValue> {
+    evaluate_network_interfaces(
+        Path::new("/etc/network/interfaces"),
+        Path::new("/etc/netplan"),
+        runner,
+    )
+}
+
+fn evaluate_network_interfaces(
+    interfaces_path: &Path,
+    netplan_dir: &Path,
+    runner: &dyn CommandRunner,
+) -> Result<RuleValue> {
+    if !interfaces_path.exists() {
+        return Ok(RuleValue::Str(String::new()));
+    }
+    let content = fs::read_to_string(interfaces_path)
+        .map_err(|e| anyhow!("{}: {e}", interfaces_path.display()))?;
+
+    let non_lo_count = content
+        .lines()
+        .filter(|l| {
+            let t = l.trim();
+            (t.starts_with("iface ") && !t.starts_with("iface lo "))
+                || (t.starts_with("auto ") && t.trim_start_matches("auto").trim() != "lo")
+        })
+        .count();
+
+    if non_lo_count == 0 {
+        return Ok(RuleValue::Str(String::new()));
+    }
+
+    let netplan_active =
+        netplan_dir.exists() && fs::read_dir(netplan_dir).is_ok_and(|mut d| d.next().is_some());
+    let nm_active = runner
+        .run("systemctl", &["is-active", "--quiet", "NetworkManager"])
+        .is_ok_and(|o| o.success);
+
+    if netplan_active || nm_active {
+        let managers = match (netplan_active, nm_active) {
+            (true, true) => "Netplan and NetworkManager",
+            (true, false) => "Netplan",
+            _ => "NetworkManager",
+        };
+        Ok(RuleValue::Str(format!("overlap:{non_lo_count}:{managers}")))
+    } else {
+        Ok(RuleValue::Str(format!("legacy:{non_lo_count}")))
+    }
+}
+
+// ── InstalledDenylist ─────────────────────────────────────────────────────────
+
+/// Return a `List` of `"name|reason"` strings for denylist packages that are
+/// currently installed.
+pub fn installed_denylist(
+    runner: &dyn CommandRunner,
+    packages: &[DenylistEntry],
+) -> Result<RuleValue> {
+    if packages.is_empty() {
+        return Ok(RuleValue::List(vec![]));
+    }
+    let out = runner
+        .run("dpkg-query", &["-W", "-f=${Package}\n"])
+        .map_err(|e| anyhow!("dpkg-query: {e}"))?;
+
+    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+    let installed: std::collections::HashSet<&str> = stdout.lines().collect();
+
+    let matches: Vec<RuleValue> = packages
+        .iter()
+        .filter(|p| installed.contains(p.name.as_str()))
+        .map(|p| RuleValue::Str(format!("{}|{}", p.name, p.reason)))
+        .collect();
+
+    Ok(RuleValue::List(matches))
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use hah_core::runner::{CommandOutput, MockCommandRunner};
+    use hah_core::{
+        config::DenylistEntry,
+        runner::{CommandOutput, MockCommandRunner},
+    };
     use std::io;
     use std::time::{Duration, SystemTime};
     use tempfile::TempDir;
@@ -566,5 +699,198 @@ mod tests {
         mock.expect_run()
             .returning(|_, _| Err(io::Error::new(io::ErrorKind::NotFound, "not found")));
         assert!(stale_kernel_headers(&mock).is_err());
+    }
+
+    // ── legacy_apt_sources ────────────────────────────────────────────────────
+
+    #[test]
+    fn legacy_apt_sources_returns_ok() {
+        let result = legacy_apt_sources();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn collect_legacy_sources_detects_deb_line() {
+        let tmp = TempDir::new().unwrap();
+        let list = tmp.path().join("sources.list");
+        std::fs::write(&list, "deb http://archive.ubuntu.com/ubuntu focal main\n").unwrap();
+        let d = tmp.path().join("sources.list.d");
+        std::fs::create_dir_all(&d).unwrap();
+        let result = collect_legacy_sources(&list, &d).unwrap();
+        let RuleValue::List(items) = result else {
+            panic!("expected list");
+        };
+        assert_eq!(items.len(), 1);
+    }
+
+    #[test]
+    fn collect_legacy_sources_detects_list_files_in_dir() {
+        let tmp = TempDir::new().unwrap();
+        let list = tmp.path().join("sources.list");
+        std::fs::write(&list, "# no deb lines\n").unwrap();
+        let d = tmp.path().join("sources.list.d");
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::write(
+            d.join("extra.list"),
+            "deb-src http://example.com/ stable main\n",
+        )
+        .unwrap();
+        std::fs::write(d.join("modern.sources"), "Types: deb\n").unwrap();
+        let result = collect_legacy_sources(&list, &d).unwrap();
+        let RuleValue::List(items) = result else {
+            panic!("expected list");
+        };
+        assert_eq!(items.len(), 1);
+        assert!(items[0].display().contains("extra.list"));
+    }
+
+    #[test]
+    fn collect_legacy_sources_empty_when_no_deb_lines() {
+        let tmp = TempDir::new().unwrap();
+        let list = tmp.path().join("sources.list");
+        std::fs::write(&list, "# comment only\n").unwrap();
+        let d = tmp.path().join("sources.list.d");
+        std::fs::create_dir_all(&d).unwrap();
+        let result = collect_legacy_sources(&list, &d).unwrap();
+        assert_eq!(result, RuleValue::List(vec![]));
+    }
+
+    // ── legacy_network_interfaces ─────────────────────────────────────────────
+
+    #[test]
+    fn legacy_network_interfaces_returns_ok() {
+        let mock = MockCommandRunner::new();
+        let result = legacy_network_interfaces(&mock);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn evaluate_network_interfaces_absent_returns_empty() {
+        let mock = MockCommandRunner::new();
+        let result = evaluate_network_interfaces(
+            Path::new("/nonexistent"),
+            Path::new("/nonexistent"),
+            &mock,
+        )
+        .unwrap();
+        assert_eq!(result, RuleValue::Str(String::new()));
+    }
+
+    #[test]
+    fn evaluate_network_interfaces_loopback_only_returns_empty() {
+        let tmp = TempDir::new().unwrap();
+        let ifaces = tmp.path().join("interfaces");
+        std::fs::write(&ifaces, "auto lo\niface lo inet loopback\n").unwrap();
+        let mock = MockCommandRunner::new();
+        let result =
+            evaluate_network_interfaces(&ifaces, Path::new("/nonexistent"), &mock).unwrap();
+        assert_eq!(result, RuleValue::Str(String::new()));
+    }
+
+    #[test]
+    fn evaluate_network_interfaces_legacy_no_manager() {
+        let tmp = TempDir::new().unwrap();
+        let ifaces = tmp.path().join("interfaces");
+        std::fs::write(&ifaces, "auto eth0\niface eth0 inet dhcp\n").unwrap();
+        let mut mock = MockCommandRunner::new();
+        mock.expect_run().returning(|_, _| {
+            Ok(CommandOutput {
+                stdout: vec![],
+                stderr: vec![],
+                success: false,
+            })
+        });
+        let result =
+            evaluate_network_interfaces(&ifaces, Path::new("/nonexistent"), &mock).unwrap();
+        assert_eq!(result, RuleValue::Str("legacy:2".into()));
+    }
+
+    #[test]
+    fn evaluate_network_interfaces_overlap_with_netplan() {
+        let tmp = TempDir::new().unwrap();
+        let ifaces = tmp.path().join("interfaces");
+        std::fs::write(&ifaces, "auto eth0\niface eth0 inet dhcp\n").unwrap();
+        let netplan = tmp.path().join("netplan");
+        std::fs::create_dir_all(&netplan).unwrap();
+        std::fs::write(netplan.join("01-config.yaml"), "network:\n").unwrap();
+        let mut mock = MockCommandRunner::new();
+        mock.expect_run().returning(|_, _| {
+            Ok(CommandOutput {
+                stdout: vec![],
+                stderr: vec![],
+                success: false,
+            })
+        });
+        let result = evaluate_network_interfaces(&ifaces, &netplan, &mock).unwrap();
+        assert_eq!(result, RuleValue::Str("overlap:2:Netplan".into()));
+    }
+
+    #[test]
+    fn evaluate_network_interfaces_overlap_with_nm() {
+        let tmp = TempDir::new().unwrap();
+        let ifaces = tmp.path().join("interfaces");
+        std::fs::write(&ifaces, "auto eth0\niface eth0 inet dhcp\n").unwrap();
+        let mut mock = MockCommandRunner::new();
+        mock.expect_run().returning(|_, _| {
+            Ok(CommandOutput {
+                stdout: vec![],
+                stderr: vec![],
+                success: true,
+            })
+        });
+        let result =
+            evaluate_network_interfaces(&ifaces, Path::new("/nonexistent"), &mock).unwrap();
+        assert_eq!(result, RuleValue::Str("overlap:2:NetworkManager".into()));
+    }
+
+    // ── installed_denylist ────────────────────────────────────────────────────
+
+    #[test]
+    fn installed_denylist_empty_packages_returns_empty() {
+        let mock = MockCommandRunner::new();
+        let result = installed_denylist(&mock, &[]).unwrap();
+        assert_eq!(result, RuleValue::List(vec![]));
+    }
+
+    #[test]
+    fn installed_denylist_finds_matching_package() {
+        let mut mock = MockCommandRunner::new();
+        mock.expect_run()
+            .returning(|_, _| ok_out("bash\nbad-pkg\nvim\n"));
+        let packages = vec![DenylistEntry {
+            name: "bad-pkg".into(),
+            reason: "insecure".into(),
+        }];
+        let result = installed_denylist(&mock, &packages).unwrap();
+        let RuleValue::List(items) = result else {
+            panic!("expected list");
+        };
+        assert_eq!(items.len(), 1);
+        assert!(items[0].display().contains("bad-pkg"));
+        assert!(items[0].display().contains("insecure"));
+    }
+
+    #[test]
+    fn installed_denylist_no_match_returns_empty() {
+        let mut mock = MockCommandRunner::new();
+        mock.expect_run().returning(|_, _| ok_out("bash\nvim\n"));
+        let packages = vec![DenylistEntry {
+            name: "bad-pkg".into(),
+            reason: "insecure".into(),
+        }];
+        let result = installed_denylist(&mock, &packages).unwrap();
+        assert_eq!(result, RuleValue::List(vec![]));
+    }
+
+    #[test]
+    fn installed_denylist_propagates_error() {
+        let mut mock = MockCommandRunner::new();
+        mock.expect_run()
+            .returning(|_, _| Err(io::Error::new(io::ErrorKind::NotFound, "not found")));
+        let packages = vec![DenylistEntry {
+            name: "x".into(),
+            reason: "y".into(),
+        }];
+        assert!(installed_denylist(&mock, &packages).is_err());
     }
 }
