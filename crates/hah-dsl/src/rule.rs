@@ -443,6 +443,17 @@ impl RuleBasedCheck {
                 "unknown".into()
             }),
         );
+        values.insert(
+            "config.allowlist.packages".into(),
+            RuleValue::List(
+                ctx.config
+                    .allowlist
+                    .packages
+                    .iter()
+                    .map(|s| RuleValue::Str(s.clone()))
+                    .collect(),
+            ),
+        );
         values
     }
 }

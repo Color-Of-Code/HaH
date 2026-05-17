@@ -138,13 +138,16 @@ fn str_arg_filter(name: &str, args: &[RuleValue]) -> Result<Option<Filter>> {
 
 fn list_arg_filter(name: &str, args: &[RuleValue]) -> Result<Option<Filter>> {
     match name {
-        "intersect" => {
+        "intersect" | "reject_in" => {
             let items = args
                 .first()
                 .and_then(RuleValue::as_list)
-                .ok_or_else(|| anyhow!("intersect requires a list argument"))?;
+                .ok_or_else(|| anyhow!("{name} requires a list argument"))?;
             let strings: Vec<String> = items.iter().map(RuleValue::display).collect();
-            Ok(Some(Filter::Intersect(strings)))
+            Ok(Some(match name {
+                "intersect" => Filter::Intersect(strings),
+                _ => Filter::RejectIn(strings),
+            }))
         }
         _ => Ok(None),
     }

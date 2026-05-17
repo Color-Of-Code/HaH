@@ -119,6 +119,7 @@ pub enum Filter {
     GroupCount(usize),
     WhereGt(i64),
     Intersect(Vec<String>),
+    RejectIn(Vec<String>),
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────

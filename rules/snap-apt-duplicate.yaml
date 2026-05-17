@@ -1,0 +1,32 @@
+rules:
+  - id: snap-apt-duplicate
+    title: Software installed via both Snap and APT
+    only_if:
+      require_commands: [snap]
+    triggers:
+      - name: snap_list
+        command:
+          program: snap
+          args: [list]
+        transform: "$stdout | lines | skip(1) | non_empty"
+      - name: apt_list
+        command:
+          program: dpkg-query
+          args: ["-W", "-f=${Package}\n"]
+        transform: "$stdout | lines | non_empty"
+    values:
+      snap_names: "$snap_list | field(0)"
+      duplicates: "$snap_names | intersect($apt_list) | reject_contains('snapd') | reject_in($config.allowlist.packages)"
+    conditions:
+      - type: for_each
+        source: "$duplicates"
+        item_var: pkg
+        severity: Warning
+    outcome:
+      finding_id: "snap-apt-dup-{pkg}"
+      title: "'{pkg}' is installed via both APT and Snap"
+      description: "Having '{pkg}' installed twice wastes space and may cause version conflicts or confusion."
+      remediation:
+        description: Remove the APT version if the Snap is preferred.
+        commands:
+          - "sudo apt remove --purge {pkg}"

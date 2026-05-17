@@ -159,6 +159,21 @@ pub fn intersect(value: RuleValue, other: &[String]) -> Result<RuleValue> {
     }
 }
 
+/// Set subtraction: remove items whose display form appears in `other`.
+pub fn reject_in(value: RuleValue, other: &[String]) -> Result<RuleValue> {
+    match value {
+        RuleValue::List(v) => {
+            let set: HashSet<&str> = other.iter().map(String::as_str).collect();
+            Ok(RuleValue::List(
+                v.into_iter()
+                    .filter(|item| !set.contains(item.display().as_str()))
+                    .collect(),
+            ))
+        }
+        other_val => Err(anyhow!("reject_in: expected a list, got {:?}", other_val)),
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -354,5 +369,18 @@ mod tests {
     #[test]
     fn intersect_err_on_non_list() {
         assert!(intersect(sv("x"), &["y".to_string()]).is_err());
+    }
+
+    #[test]
+    fn reject_in_removes_matching_items() {
+        let input = list(&["firefox", "chromium", "vscode"]);
+        let other = vec!["chromium".to_string(), "vim".to_string()];
+        let result = reject_in(input, &other).unwrap();
+        assert_eq!(result, list(&["firefox", "vscode"]));
+    }
+
+    #[test]
+    fn reject_in_err_on_non_list() {
+        assert!(reject_in(sv("x"), &["y".to_string()]).is_err());
     }
 }
