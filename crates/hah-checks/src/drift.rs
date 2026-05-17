@@ -5,48 +5,6 @@ use hah_core::{
 
 use hah_utils::fs::sanitize_id;
 
-// ── BrokenSymlinksCheck ──────────────────────────────────────────────────────
-
-pub struct BrokenSymlinksCheck;
-
-const SCAN_DIRS: &[&str] = &["/etc", "/usr/lib", "/var/lib"];
-
-impl Check for BrokenSymlinksCheck {
-    fn id(&self) -> &str {
-        "broken-symlinks"
-    }
-
-    fn title(&self) -> &str {
-        "Broken symbolic links"
-    }
-
-    fn run(&self, _ctx: &Context) -> CheckResult {
-        scan_for_broken_symlinks(SCAN_DIRS)
-    }
-}
-
-/// Walk `dirs` and collect a finding for every symlink that points to a
-/// non-existent target.  Extracted so it can be unit-tested with temp dirs.
-pub(crate) fn scan_for_broken_symlinks(dirs: &[&str]) -> CheckResult {
-    let mut result = CheckResult::default();
-    for path in hah_utils::fs::broken_symlinks(dirs) {
-        result = result.with_finding(Finding {
-            id: format!("broken-symlink-{}", sanitize_id(&path.to_string_lossy())),
-            title: format!("Broken symlink: {}", path.display()),
-            description: format!(
-                "The symlink {} points to a non-existent target.",
-                path.display()
-            ),
-            severity: Severity::Warning,
-            remediation: Some(Remediation {
-                description: "Remove the broken symlink.".into(),
-                commands: vec![format!("sudo rm {}", path.display())],
-            }),
-        });
-    }
-    result
-}
-
 // ── OldCrashDumpsCheck ───────────────────────────────────────────────────────
 
 pub struct OldCrashDumpsCheck;
@@ -101,62 +59,11 @@ pub(crate) fn scan_crash_dirs(dirs: &[&str], max_days: u64) -> CheckResult {
     result
 }
 
-// ── JournalSizeCheck ─────────────────────────────────────────────────────────
-
-pub struct JournalSizeCheck;
-
-impl Check for JournalSizeCheck {
-    fn id(&self) -> &str {
-        "journal-size"
-    }
-
-    fn title(&self) -> &str {
-        "systemd journal disk usage"
-    }
-
-    fn run(&self, ctx: &Context) -> CheckResult {
-        let threshold_mb = ctx.config.threshold("journal_size_mb", 500);
-
-        let out = match ctx.runner.run("journalctl", &["--disk-usage"]) {
-            Ok(o) => o,
-            Err(_) => return CheckResult::default(),
-        };
-
-        let stdout = String::from_utf8_lossy(&out.stdout);
-        let size_bytes = hah_utils::size::parse_journal_disk_usage(&stdout).unwrap_or(0);
-        let threshold_bytes = threshold_mb * 1_000_000;
-
-        if size_bytes > threshold_bytes {
-            let size_mb = size_bytes / 1_000_000;
-            CheckResult::default().with_finding(Finding {
-                id: "journal-size-large".into(),
-                title: format!("systemd journal is {size_mb} MB"),
-                description: format!(
-                    "The systemd journal occupies {size_mb} MB, \
-                     exceeding the {threshold_mb} MB threshold."
-                ),
-                severity: Severity::Warning,
-                remediation: Some(Remediation {
-                    description: "Vacuum the journal to reclaim space.".into(),
-                    commands: vec![format!("sudo journalctl --vacuum-size={threshold_mb}M")],
-                }),
-            })
-        } else {
-            CheckResult::default()
-        }
-    }
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::if_same_then_else)]
 mod tests {
     use super::*;
-    use hah_core::{
-        check::Context,
-        config::Config,
-        distro::DistroInfo,
-        runner::{CommandOutput, CommandRunner},
-    };
+    use hah_core::{check::Context, config::Config, distro::DistroInfo, runner::CommandRunner};
     use mockall::mock;
     use std::sync::Arc;
     use std::time::{Duration, SystemTime};
@@ -164,15 +71,7 @@ mod tests {
     mock! {
         Runner {}
         impl CommandRunner for Runner {
-            fn run<'a>(&self, program: &'a str, args: &'a [&'a str]) -> std::io::Result<CommandOutput>;
-        }
-    }
-
-    fn ok_output(stdout: &str) -> CommandOutput {
-        CommandOutput {
-            stdout: stdout.as_bytes().to_vec(),
-            stderr: vec![],
-            success: true,
+            fn run<'a>(&self, program: &'a str, args: &'a [&'a str]) -> std::io::Result<hah_core::runner::CommandOutput>;
         }
     }
 
@@ -183,136 +82,6 @@ mod tests {
             distro: DistroInfo::default(),
             runner,
         }
-    }
-
-    // ── JournalSizeCheck ──────────────────────────────────────────────────────
-
-    #[test]
-    fn journal_size_id_and_title() {
-        assert_eq!(JournalSizeCheck.id(), "journal-size");
-        assert!(!JournalSizeCheck.title().is_empty());
-    }
-
-    #[test]
-    fn journal_size_below_default_threshold() {
-        let mut runner = MockRunner::new();
-        runner.expect_run().returning(|_, _| {
-            Ok(ok_output(
-                "Archived and active journals take up 100M in the file system.\n",
-            ))
-        });
-        assert!(
-            JournalSizeCheck
-                .run(&make_ctx(Arc::new(runner)))
-                .findings
-                .is_empty()
-        );
-    }
-
-    #[test]
-    fn journal_size_above_default_threshold() {
-        let mut runner = MockRunner::new();
-        runner.expect_run().returning(|_, _| {
-            Ok(ok_output(
-                "Archived and active journals take up 2G in the file system.\n",
-            ))
-        });
-        let result = JournalSizeCheck.run(&make_ctx(Arc::new(runner)));
-        assert_eq!(result.findings.len(), 1);
-        assert_eq!(result.findings[0].severity, Severity::Warning);
-    }
-
-    #[test]
-    fn journal_size_runner_error_returns_empty() {
-        let mut runner = MockRunner::new();
-        runner.expect_run().returning(|_, _| {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "not found",
-            ))
-        });
-        assert!(
-            JournalSizeCheck
-                .run(&make_ctx(Arc::new(runner)))
-                .findings
-                .is_empty()
-        );
-    }
-
-    #[test]
-    fn journal_size_custom_threshold_not_exceeded() {
-        let mut runner = MockRunner::new();
-        runner.expect_run().returning(|_, _| {
-            Ok(ok_output(
-                "Archived and active journals take up 1G in the file system.\n",
-            ))
-        });
-        let mut config = Config::default();
-        config.thresholds.insert("journal_size_mb".into(), 2048); // 2 GB threshold
-        let ctx = Context {
-            config,
-            ..make_ctx(Arc::new(runner))
-        };
-        assert!(JournalSizeCheck.run(&ctx).findings.is_empty());
-    }
-
-    #[test]
-    fn journal_size_output_without_size_returns_empty() {
-        let mut runner = MockRunner::new();
-        runner
-            .expect_run()
-            .returning(|_, _| Ok(ok_output("No journal files found.\n")));
-        assert!(
-            JournalSizeCheck
-                .run(&make_ctx(Arc::new(runner)))
-                .findings
-                .is_empty()
-        );
-    }
-
-    // ── BrokenSymlinksCheck ───────────────────────────────────────────────────
-
-    #[test]
-    fn broken_symlinks_id_and_title() {
-        assert_eq!(BrokenSymlinksCheck.id(), "broken-symlinks");
-        assert!(!BrokenSymlinksCheck.title().is_empty());
-    }
-
-    #[test]
-    fn broken_symlinks_does_not_panic() {
-        let ctx = make_ctx(Arc::new(MockRunner::new()));
-        let result = BrokenSymlinksCheck.run(&ctx);
-        for f in &result.findings {
-            assert!(!f.id.is_empty());
-        }
-    }
-
-    #[test]
-    fn scan_for_broken_symlinks_empty_dir_returns_no_findings() {
-        let tmp = tempfile::tempdir().unwrap();
-        let result = scan_for_broken_symlinks(&[tmp.path().to_str().unwrap()]);
-        assert!(result.findings.is_empty());
-    }
-
-    #[test]
-    fn scan_for_broken_symlinks_detects_broken_link() {
-        let tmp = tempfile::tempdir().unwrap();
-        let link = tmp.path().join("broken");
-        std::os::unix::fs::symlink("/nonexistent/target_xyz", &link).unwrap();
-        let result = scan_for_broken_symlinks(&[tmp.path().to_str().unwrap()]);
-        assert_eq!(result.findings.len(), 1);
-        assert!(result.findings[0].description.contains("broken"));
-    }
-
-    #[test]
-    fn scan_for_broken_symlinks_valid_link_is_not_reported() {
-        let tmp = tempfile::tempdir().unwrap();
-        let target = tmp.path().join("real");
-        std::fs::write(&target, "data").unwrap();
-        let link = tmp.path().join("valid_link");
-        std::os::unix::fs::symlink(&target, &link).unwrap();
-        let result = scan_for_broken_symlinks(&[tmp.path().to_str().unwrap()]);
-        assert!(result.findings.is_empty());
     }
 
     // ── OldCrashDumpsCheck ────────────────────────────────────────────────────

@@ -1,0 +1,29 @@
+rules:
+  - id: stale-kernel-headers
+    title: Stale kernel header packages
+
+    only_if:
+      distro_family: debian
+
+    triggers:
+      - name: stale_headers
+        capability:
+          type: stale_kernel_headers
+
+    values:
+      stale_count: "$stale_headers | count"
+      stale_list: "$stale_headers | join(', ')"
+
+    conditions:
+      - type: non_empty
+        value: "$stale_headers"
+        severity: Info
+
+    outcome:
+      finding_id: stale-kernel-headers
+      title: "{stale_count} stale kernel header package(s)"
+      description: "Header packages with no matching kernel: {stale_list}."
+      remediation:
+        description: "Remove stale kernel header packages."
+        commands:
+          - "sudo apt autoremove --purge"

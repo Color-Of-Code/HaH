@@ -5,66 +5,6 @@ use hah_core::{
     model::{CheckResult, Finding, Remediation, Severity},
 };
 
-// ── ResidualConfigCheck ──────────────────────────────────────────────────────
-
-pub struct ResidualConfigCheck;
-
-impl Check for ResidualConfigCheck {
-    fn id(&self) -> &str {
-        "residual-config"
-    }
-
-    fn title(&self) -> &str {
-        "Residual package configuration files"
-    }
-
-    fn run(&self, ctx: &Context) -> CheckResult {
-        if !ctx.distro.is_debian_family() {
-            return CheckResult::default();
-        }
-
-        let out = match ctx
-            .runner
-            .run("dpkg-query", &["-W", "-f=${Status} ${Package}\n"])
-        {
-            Ok(o) => o,
-            Err(e) => return CheckResult::default().with_error(e.to_string()),
-        };
-
-        let stdout = String::from_utf8_lossy(&out.stdout);
-        let rc_packages: Vec<String> = stdout
-            .lines()
-            .filter(|l| l.starts_with("deinstall ok config-files "))
-            .map(|l| {
-                l.trim_start_matches("deinstall ok config-files ")
-                    .to_string()
-            })
-            .filter(|pkg| !ctx.config.allowlist.packages.contains(pkg))
-            .collect();
-
-        if rc_packages.is_empty() {
-            return CheckResult::default();
-        }
-
-        let list = rc_packages.join(" ");
-        CheckResult::default().with_finding(Finding {
-            id: "residual-config".into(),
-            title: format!(
-                "{} package(s) with residual configuration",
-                rc_packages.len()
-            ),
-            description: format!(
-                "These packages were removed but their configuration files remain: {list}."
-            ),
-            severity: Severity::Info,
-            remediation: Some(Remediation {
-                description: "Purge residual configurations.".into(),
-                commands: vec![format!("sudo dpkg --purge {list}")],
-            }),
-        })
-    }
-}
-
 // ── DpkgStateCheck ───────────────────────────────────────────────────────────
 
 pub struct DpkgStateCheck;
@@ -104,52 +44,6 @@ impl Check for DpkgStateCheck {
                     "sudo dpkg --configure -a".into(),
                     "sudo apt-get install -f".into(),
                 ],
-            }),
-        })
-    }
-}
-
-// ── AutoremovableCheck ───────────────────────────────────────────────────────
-
-pub struct AutoremovableCheck;
-
-impl Check for AutoremovableCheck {
-    fn id(&self) -> &str {
-        "autoremovable"
-    }
-
-    fn title(&self) -> &str {
-        "Auto-removable packages"
-    }
-
-    fn run(&self, ctx: &Context) -> CheckResult {
-        if !ctx.distro.is_debian_family() {
-            return CheckResult::default();
-        }
-
-        let out = match ctx.runner.run("apt-get", &["--dry-run", "autoremove"]) {
-            Ok(o) => o,
-            Err(e) => return CheckResult::default().with_error(e.to_string()),
-        };
-
-        let stdout = String::from_utf8_lossy(&out.stdout);
-        let count = stdout
-            .lines()
-            .filter(|l| l.trim_start().starts_with("Remv "))
-            .count();
-
-        if count == 0 {
-            return CheckResult::default();
-        }
-
-        CheckResult::default().with_finding(Finding {
-            id: "autoremovable".into(),
-            title: format!("{count} auto-removable package(s)"),
-            description: format!("{count} package(s) are no longer needed and can be removed."),
-            severity: Severity::Info,
-            remediation: Some(Remediation {
-                description: "Remove unused auto-installed packages.".into(),
-                commands: vec!["sudo apt autoremove --purge".into()],
             }),
         })
     }
@@ -383,67 +277,6 @@ mod tests {
         make_ctx(Arc::new(MockRunner::new()), Config::default(), "arch")
     }
 
-    // ── ResidualConfigCheck ──────────────────────────────────────────────────
-
-    #[test]
-    fn residual_config_skips_non_debian() {
-        assert!(
-            ResidualConfigCheck
-                .run(&non_debian_ctx())
-                .findings
-                .is_empty()
-        );
-    }
-
-    #[test]
-    fn residual_config_clean() {
-        let mut runner = MockRunner::new();
-        runner
-            .expect_run()
-            .returning(|_, _| Ok(ok_output("install ok installed bash\n")));
-        let result = ResidualConfigCheck.run(&debian_ctx(Arc::new(runner)));
-        assert!(result.findings.is_empty());
-        assert!(result.errors.is_empty());
-    }
-
-    #[test]
-    fn residual_config_finds_rc_packages() {
-        let mut runner = MockRunner::new();
-        runner.expect_run().returning(|_, _| {
-            Ok(ok_output(
-                "deinstall ok config-files pkg-a\ninstall ok installed bash\n",
-            ))
-        });
-        let result = ResidualConfigCheck.run(&debian_ctx(Arc::new(runner)));
-        assert_eq!(result.findings.len(), 1);
-        assert!(result.findings[0].title.contains('1'));
-    }
-
-    #[test]
-    fn residual_config_allowlist_filters_package() {
-        let mut runner = MockRunner::new();
-        runner
-            .expect_run()
-            .returning(|_, _| Ok(ok_output("deinstall ok config-files known-pkg\n")));
-        let mut config = Config::default();
-        config.allowlist.packages = vec!["known-pkg".into()];
-        let ctx = make_ctx(Arc::new(runner), config, "debian");
-        assert!(ResidualConfigCheck.run(&ctx).findings.is_empty());
-    }
-
-    #[test]
-    fn residual_config_runner_error_returns_error() {
-        let mut runner = MockRunner::new();
-        runner.expect_run().returning(|_, _| {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "not found",
-            ))
-        });
-        let result = ResidualConfigCheck.run(&debian_ctx(Arc::new(runner)));
-        assert!(result.errors.len() == 1);
-    }
-
     // ── DpkgStateCheck ───────────────────────────────────────────────────────
 
     #[test]
@@ -468,41 +301,6 @@ mod tests {
         let result = DpkgStateCheck.run(&debian_ctx(Arc::new(runner)));
         assert_eq!(result.findings.len(), 1);
         assert_eq!(result.findings[0].severity, Severity::Critical);
-    }
-
-    // ── AutoremovableCheck ───────────────────────────────────────────────────
-
-    #[test]
-    fn autoremovable_skips_non_debian() {
-        assert!(
-            AutoremovableCheck
-                .run(&non_debian_ctx())
-                .findings
-                .is_empty()
-        );
-    }
-
-    #[test]
-    fn autoremovable_none() {
-        let mut runner = MockRunner::new();
-        runner
-            .expect_run()
-            .returning(|_, _| Ok(ok_output("Reading package lists...\n")));
-        let result = AutoremovableCheck.run(&debian_ctx(Arc::new(runner)));
-        assert!(result.findings.is_empty());
-    }
-
-    #[test]
-    fn autoremovable_finds_packages() {
-        let mut runner = MockRunner::new();
-        runner.expect_run().returning(|_, _| {
-            Ok(ok_output(
-                "Reading package lists...\n  Remv old-lib [1.0]\n  Remv unused-tool [2.3]\n",
-            ))
-        });
-        let result = AutoremovableCheck.run(&debian_ctx(Arc::new(runner)));
-        assert_eq!(result.findings.len(), 1);
-        assert!(result.findings[0].title.contains('2'));
     }
 
     // ── UserDefinedPackageCheck ──────────────────────────────────────────────

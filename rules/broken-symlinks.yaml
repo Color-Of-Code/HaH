@@ -1,0 +1,29 @@
+rules:
+  - id: broken-symlinks
+    title: Broken symbolic links
+
+    triggers:
+      - name: broken
+        capability:
+          type: broken_symlinks
+          paths: []
+
+    values:
+      broken_count: "$broken | count"
+      broken_list: "$broken | join(', ')"
+
+    conditions:
+      - type: non_empty
+        value: "$broken"
+        severity: Warning
+
+    outcome:
+      finding_id: broken-symlinks
+      title: "{broken_count} broken symbolic link(s) found"
+      description: >
+        The following symlinks point to non-existent targets: {broken_list}.
+        Broken symlinks can hide misconfigured packages or removed services.
+      remediation:
+        description: "Remove each broken symlink after verifying it is no longer needed."
+        commands:
+          - "sudo find /etc /usr/lib /var/lib -xtype l -delete"

@@ -1,0 +1,25 @@
+rules:
+  - id: sysctl-ordering
+    title: Conflicting sysctl.d overrides
+
+    triggers:
+      - name: conflicts
+        capability:
+          type: sysctl_conflicts
+          paths: []
+
+    values:
+      conflict_count: "$conflicts | count"
+      conflict_list: "$conflicts | join(', ')"
+
+    conditions:
+      - type: non_empty
+        value: "$conflicts"
+        severity: Warning
+
+    outcome:
+      finding_id: sysctl-ordering
+      title: "{conflict_count} sysctl key(s) with conflicting values"
+      description: >
+        The following sysctl keys are set to different values in multiple
+        sysctl.d files: {conflict_list}.

@@ -295,7 +295,6 @@ pub struct OutcomeFragment {
 pub struct RemediationTemplate {
     pub description: String,
     pub commands: Vec<String>,
-    pub safe: bool,
 }
 
 // ── RuleBasedCheck ────────────────────────────────────────────────────────────
@@ -700,7 +699,6 @@ blocks:
       remediation:
         description: "Remove with apt."
         commands: ["sudo apt remove foo"]
-        safe: false
 rules: []
 "#;
         let rs: RuleSet = hah_utils::yaml::parse(yaml).unwrap();
@@ -926,7 +924,6 @@ blocks:
       remediation:
         description: "Shared fix."
         commands: ["sudo fix"]
-        safe: false
 rules:
   - id: x
     title: X
@@ -1494,7 +1491,6 @@ blocks:
       remediation:
         description: "Block fix."
         commands: ["sudo block-fix"]
-        safe: false
 rules:
   - id: x
     title: X
@@ -1508,7 +1504,6 @@ rules:
       remediation:
         description: "Own fix."
         commands: ["sudo own-fix"]
-        safe: true
 "#,
         );
         let values = HashMap::new();

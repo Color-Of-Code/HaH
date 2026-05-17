@@ -1,0 +1,35 @@
+rules:
+  - id: residual-config
+    title: Residual package configuration files
+
+    only_if:
+      distro_family: debian
+      require_commands:
+        - dpkg-query
+
+    triggers:
+      - name: dpkg_output
+        command:
+          program: dpkg-query
+          args: ["-W", "-f=${Status} ${Package}\n"]
+
+    values:
+      rc_packages: "$dpkg_output | lines | starts_with('deinstall ok config-files ') | prefix_strip('deinstall ok config-files ') | non_empty"
+      rc_count: "$rc_packages | count"
+      packages: "$rc_packages | join(' ')"
+
+    conditions:
+      - type: non_empty
+        value: "$rc_packages"
+        severity: Info
+
+    outcome:
+      finding_id: residual-config
+      title: "{rc_count} package(s) with residual configuration"
+      description: >
+        These packages were removed but their configuration files remain: {packages}.
+      remediation:
+        description: "Purge residual configurations."
+        commands:
+          - "sudo dpkg --purge {packages}"
+

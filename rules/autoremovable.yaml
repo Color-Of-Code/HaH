@@ -1,0 +1,34 @@
+rules:
+  - id: autoremovable
+    title: Auto-removable packages
+
+    only_if:
+      distro_family: debian
+      require_commands:
+        - apt-get
+
+    triggers:
+      - name: autoremove_output
+        command:
+          program: apt-get
+          args: ["--dry-run", "autoremove"]
+
+    values:
+      autoremovable_count: "$autoremove_output | lines | starts_with('Remv ') | count"
+
+    conditions:
+      - type: numeric_threshold
+        value: "$autoremovable_count"
+        operator: gt
+        threshold: "0"
+        severity: Info
+
+    outcome:
+      finding_id: autoremovable
+      title: "{autoremovable_count} auto-removable package(s)"
+      description: >
+        {autoremovable_count} package(s) are no longer needed and can be removed.
+      remediation:
+        description: "Remove unused auto-installed packages."
+        commands:
+          - "sudo apt autoremove --purge"

@@ -1,27 +1,31 @@
 use hah_checks::{
-    apt::{
-        AptKeyCheck, AutoremovableCheck, DpkgStateCheck, LegacySourcesFormatCheck,
-        ResidualConfigCheck, UserDefinedPackageCheck,
-    },
-    boot::{
-        BootSpaceCheck, DkmsStatusCheck, InitramfsCheck, InitramfsCompressionCheck,
-        StaleKernelHeadersCheck, UnusedKernelsCheck,
-    },
-    drift::{BrokenSymlinksCheck, JournalSizeCheck, OldCrashDumpsCheck},
+    apt::{AptKeyCheck, DpkgStateCheck, LegacySourcesFormatCheck, UserDefinedPackageCheck},
+    boot::{DkmsStatusCheck, InitramfsCheck, InitramfsCompressionCheck},
+    drift::OldCrashDumpsCheck,
     network::{
-        LegacyDhcpClientCheck, LegacyNetworkInterfacesCheck, LegacyNtpCheck, NtpConflictCheck,
-        ResolvedConfigCheck,
+        LegacyDhcpClientCheck, LegacyNetworkInterfacesCheck, NtpConflictCheck, ResolvedConfigCheck,
     },
     snap::{SnapAptDuplicateCheck, SnapHealthCheck},
-    sysctl::SysctlOrderingCheck,
 };
 use hah_core::{check::Check, config::Config};
 use hah_dsl::rule::RuleSet;
 use std::path::PathBuf;
 
-/// Rule file search path: system-wide, user-local, then extra paths from config.
+/// Default rules directory shipped alongside the binary.
+///
+/// At build time this resolves to `rules/` at the workspace root.  When the
+/// tool is installed system-wide, rules are expected at `/usr/share/hah/rules/`
+/// (override via `rule_dirs` in the config file).
+const DEFAULT_RULES_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../rules");
+
+/// Rule file search path: default shipped rules, system-wide, user-local, then
+/// extra paths from config.
 fn rule_search_dirs(config: &Config) -> Vec<PathBuf> {
-    let mut dirs = vec![PathBuf::from("/etc/hah/rules.d")];
+    let mut dirs = vec![
+        PathBuf::from(DEFAULT_RULES_DIR),
+        PathBuf::from("/usr/share/hah/rules"),
+        PathBuf::from("/etc/hah/rules.d"),
+    ];
     if let Some(d) = hah_utils::paths::user_config_dir() {
         dirs.push(d.join("hah/rules.d"));
     }
@@ -30,26 +34,18 @@ fn rule_search_dirs(config: &Config) -> Vec<PathBuf> {
 }
 
 pub(crate) fn all_checks(config: &Config) -> Vec<Box<dyn Check>> {
+    // Compiled checks for logic too complex for the declarative DSL.
     let mut checks: Vec<Box<dyn Check>> = vec![
-        Box::new(BootSpaceCheck),
-        Box::new(UnusedKernelsCheck),
-        Box::new(StaleKernelHeadersCheck),
         Box::new(InitramfsCheck),
         Box::new(InitramfsCompressionCheck),
         Box::new(DkmsStatusCheck),
         Box::new(AptKeyCheck),
         Box::new(LegacySourcesFormatCheck),
         Box::new(DpkgStateCheck),
-        Box::new(ResidualConfigCheck),
-        Box::new(AutoremovableCheck),
         Box::new(UserDefinedPackageCheck),
         Box::new(SnapHealthCheck),
         Box::new(SnapAptDuplicateCheck),
-        Box::new(BrokenSymlinksCheck),
         Box::new(OldCrashDumpsCheck),
-        Box::new(JournalSizeCheck),
-        Box::new(SysctlOrderingCheck),
-        Box::new(LegacyNtpCheck),
         Box::new(NtpConflictCheck),
         Box::new(LegacyDhcpClientCheck),
         Box::new(LegacyNetworkInterfacesCheck),
@@ -84,7 +80,8 @@ mod tests {
     #[test]
     fn all_checks_returns_expected_count() {
         let checks = all_checks(&Config::default());
-        assert_eq!(checks.len(), 23);
+        // 14 compiled + 10 rules from ./rules/ (legacy-ntp.yaml has 2 rules)
+        assert_eq!(checks.len(), 24);
     }
 
     #[test]

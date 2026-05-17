@@ -1,0 +1,33 @@
+rules:
+  - id: journal-size
+    title: systemd journal disk usage
+
+    only_if:
+      require_commands:
+        - journalctl
+
+    triggers:
+      - name: journal_mb
+        capability:
+          type: journal_usage
+
+    values:
+      threshold_mb: "$config.journal_size_mb | default('500')"
+
+    conditions:
+      - type: numeric_threshold
+        value: "$journal_mb"
+        operator: gt
+        threshold: "$threshold_mb"
+        severity: Warning
+
+    outcome:
+      finding_id: journal-size-large
+      title: "systemd journal is {journal_mb} MB"
+      description: >
+        The systemd journal occupies {journal_mb} MB,
+        exceeding the {threshold_mb} MB threshold.
+      remediation:
+        description: "Vacuum the journal to reclaim space."
+        commands:
+          - "sudo journalctl --vacuum-size={threshold_mb}M"

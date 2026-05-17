@@ -1,21 +1,3 @@
-# Example rule: legacy NTP daemon
-#
-# Demonstrates multi-probe rules and composite All/Any conditions.
-# Two rules cover the two distinct findings the built-in LegacyNtpCheck
-# emits:
-#
-#   legacy-ntp-conflict-dsl  (Warning) — ntp installed AND a modern time-sync
-#                                        service is active simultaneously
-#   legacy-ntp-dsl           (Info)    — ntp installed but no modern time-sync
-#                                        service is active
-#
-# The built-in LegacyNtpCheck already covers this — these rules exist to show
-# how probe triggers and composite conditions compose in the DSL.
-#
-# Copy to /etc/hah/rules.d/ or ~/.config/hah/rules.d/ to activate.
-
-# ── Shared reusable blocks ────────────────────────────────────────────────────
-
 blocks:
   guards:
     debian_ntp:
@@ -28,16 +10,12 @@ blocks:
         commands:
           - "sudo apt remove --purge ntp"
           - "sudo apt install chrony && sudo systemctl enable --now chrony"
-        safe: false
-
-# ── Rules ─────────────────────────────────────────────────────────────────────
 
 rules:
-
-  # Warning: ntp is installed AND a modern time-sync service is running.
-  # Both daemons will compete to adjust the clock.
-  - id: legacy-ntp-conflict-dsl
-    title: Legacy ntp package conflicts with active time-sync service (DSL example)
+  # Warning: ntp is installed AND a modern time-sync service is also active.
+  # Both daemons compete to adjust the system clock.
+  - id: legacy-ntp-conflict
+    title: Legacy NTP daemon conflicts with active time-sync service
 
     use:
       guard: debian_ntp
@@ -64,28 +42,30 @@ rules:
           - type: equals
             value: "$ntp_installed"
             expected: true
+            severity: Warning
           - type: any
             severity: Warning
             conditions:
               - type: equals
                 value: "$chrony_active"
                 expected: true
+                severity: Warning
               - type: equals
                 value: "$timesyncd_active"
                 expected: true
+                severity: Warning
 
     outcome:
-      finding_id: legacy-ntp-conflict-dsl
+      finding_id: legacy-ntp
       title: "Legacy ntp package is installed alongside an active time-sync service"
       description: >
-        The legacy ntp (ISC ntpd) package is installed while chrony or
-        systemd-timesyncd is also active.  Multiple time-sync daemons compete
-        to adjust the system clock, which can cause instability.  Remove the
-        ntp package and rely on the modern service instead.
+        The legacy ntp (ISC ntpd) package is installed while a modern time-sync
+        service is also active. Multiple time-sync daemons compete to adjust the
+        system clock, which can cause instability. Remove the ntp package.
 
   # Info: ntp is installed but no modern time-sync alternative is active.
-  - id: legacy-ntp-dsl
-    title: Legacy ntp package installed (DSL example)
+  - id: legacy-ntp
+    title: Legacy NTP daemon (ntpd / ISC ntp)
 
     use:
       guard: debian_ntp
@@ -112,18 +92,21 @@ rules:
           - type: equals
             value: "$ntp_installed"
             expected: true
+            severity: Info
           - type: equals
             value: "$chrony_active"
             expected: false
+            severity: Info
           - type: equals
             value: "$timesyncd_active"
             expected: false
+            severity: Info
 
     outcome:
-      finding_id: legacy-ntp-dsl
+      finding_id: legacy-ntp
       title: "Legacy ntp (ISC ntpd) package is installed"
       description: >
-        The legacy ntp (ISC ntpd) package is installed.  Modern alternatives
-        such as chrony (recommended for servers and VMs) or
-        systemd-timesyncd offer better accuracy, NTS/DNSSEC support, and
-        resilience to large clock jumps.
+        The legacy ntp (ISC ntpd) package is installed. Modern alternatives
+        such as chrony (recommended for servers and VMs) or systemd-timesyncd
+        offer better accuracy, NTS/DNSSEC support, and resilience to large
+        clock jumps.

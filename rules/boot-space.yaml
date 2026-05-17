@@ -1,0 +1,33 @@
+rules:
+  - id: boot-space
+    title: Free space on /boot
+
+    triggers:
+      - name: free_bytes
+        command:
+          program: df
+          args: ["--block-size=1", "--output=avail", "/boot"]
+        transform: "$stdout | lines | nth(1) | trim | number"
+
+    values:
+      free_mb: "$free_bytes | bytes_to_mb"
+      threshold_mb: "$config.boot_space_mb | default('100')"
+
+    conditions:
+      - type: numeric_threshold
+        value: "$free_mb"
+        operator: lt
+        threshold: "$threshold_mb"
+        severity: Critical
+
+    outcome:
+      finding_id: boot-space-low
+      title: "/boot has only {free_mb} MB free"
+      description: >
+        The /boot partition is nearly full ({free_mb} MB free,
+        threshold: {threshold_mb} MB). This can prevent kernel upgrades
+        or initramfs updates from completing.
+      remediation:
+        description: "Remove unused kernels to free space."
+        commands:
+          - "sudo apt autoremove --purge"

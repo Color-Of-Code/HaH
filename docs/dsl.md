@@ -212,7 +212,6 @@ outcome:
     description: "Remove unused kernels to free space."
     commands:
       - "sudo apt autoremove --purge"
-    safe: false
 ```
 
 Use `{variable}` placeholders in `title`, `description`, and remediation `description`. All
@@ -235,7 +234,6 @@ blocks:
       remediation:
         description: "Remove with apt."
         commands: ["sudo apt remove --purge {packages}"]
-        safe: false
 
 rules:
   - id: residual-config
