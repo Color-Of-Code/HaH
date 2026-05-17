@@ -14,14 +14,8 @@ rules:
       - type: all
         severity: Warning
         conditions:
-          - type: equals
-            value: "$resolved_active"
-            expected: true
-            severity: Warning
-          - type: equals
-            value: "$target | contains('systemd/resolve')"
-            expected: false
-            severity: Warning
+          - warning: "$resolved_active == true"
+          - warning: "$target | contains('systemd/resolve') != true"
     outcome:
       finding_id: resolved-config
       title: "/etc/resolv.conf is not linked to systemd-resolved"

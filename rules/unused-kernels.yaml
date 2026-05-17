@@ -15,9 +15,7 @@ rules:
       unused_list: "$unused_kernels | join(', ')"
 
     conditions:
-      - type: non_empty
-        value: "$unused_kernels"
-        severity: Warning
+      - warning: "$unused_kernels"
 
     outcome:
       finding_id: unused-kernels

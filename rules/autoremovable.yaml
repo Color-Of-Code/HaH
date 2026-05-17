@@ -17,11 +17,7 @@ rules:
       autoremovable_count: "$autoremove_output | lines | starts_with('Remv ') | count"
 
     conditions:
-      - type: numeric_threshold
-        value: "$autoremovable_count"
-        operator: gt
-        threshold: "0"
-        severity: Info
+      - info: "$autoremovable_count > 0"
 
     outcome:
       finding_id: autoremovable

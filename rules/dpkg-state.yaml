@@ -14,9 +14,7 @@ rules:
           args: ["--audit"]
 
     conditions:
-      - type: non_empty
-        value: "$audit_output | trim"
-        severity: Critical
+      - critical: "$audit_output | trim"
 
     outcome:
       finding_id: dpkg-audit

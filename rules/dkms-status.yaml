@@ -20,12 +20,8 @@ rules:
       - type: any
         severity: Warning
         conditions:
-          - type: non_empty
-            value: "$broken_modules"
-            severity: Warning
-          - type: non_empty
-            value: "$uninstalled_modules"
-            severity: Warning
+          - warning: "$broken_modules"
+          - warning: "$uninstalled_modules"
 
     outcome:
       finding_id: dkms-broken

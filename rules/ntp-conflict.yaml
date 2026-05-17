@@ -16,11 +16,7 @@ rules:
       ntp_count: "$active_ntp | lines | non_empty | count"
       ntp_list: "$active_ntp | lines | non_empty | join(', ')"
     conditions:
-      - type: numeric_threshold
-        value: "$ntp_count"
-        operator: gt
-        threshold: "1"
-        severity: Warning
+      - warning: "$ntp_count > 1"
     outcome:
       finding_id: ntp-conflict
       title: "Multiple NTP services active: {ntp_list}"

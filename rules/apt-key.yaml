@@ -9,11 +9,7 @@ rules:
           path: /etc/apt/trusted.gpg
 
     conditions:
-      - type: numeric_threshold
-        value: "$gpg_size"
-        operator: gt
-        threshold: "0"
-        severity: Warning
+      - warning: "$gpg_size > 0"
 
     outcome:
       finding_id: apt-key-legacy-gpg

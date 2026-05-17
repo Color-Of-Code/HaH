@@ -23,21 +23,12 @@ rules:
       - type: all
         severity: Info
         conditions:
-          - type: equals
-            value: "$dhclient_installed"
-            expected: true
-            severity: Info
+          - info: "$dhclient_installed == true"
           - type: any
             severity: Info
             conditions:
-              - type: equals
-                value: "$nm_installed"
-                expected: true
-                severity: Info
-              - type: equals
-                value: "$networkd_active"
-                expected: true
-                severity: Info
+              - info: "$nm_installed == true"
+              - info: "$networkd_active == true"
 
     outcome:
       finding_id: legacy-dhcp-client

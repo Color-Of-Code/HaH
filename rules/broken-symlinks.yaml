@@ -13,9 +13,7 @@ rules:
       broken_list: "$broken | join(', ')"
 
     conditions:
-      - type: non_empty
-        value: "$broken"
-        severity: Warning
+      - warning: "$broken"
 
     outcome:
       finding_id: broken-symlinks

@@ -14,11 +14,7 @@ rules:
       threshold_mb: "$config.boot_space_mb | default('100')"
 
     conditions:
-      - type: numeric_threshold
-        value: "$free_mb"
-        operator: lt
-        threshold: "$threshold_mb"
-        severity: Critical
+      - critical: "$free_mb < $threshold_mb"
 
     outcome:
       finding_id: boot-space-low

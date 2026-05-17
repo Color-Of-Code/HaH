@@ -15,11 +15,7 @@ rules:
       threshold_mb: "$config.journal_size_mb | default('500')"
 
     conditions:
-      - type: numeric_threshold
-        value: "$journal_mb"
-        operator: gt
-        threshold: "$threshold_mb"
-        severity: Warning
+      - warning: "$journal_mb > $threshold_mb"
 
     outcome:
       finding_id: journal-size-large

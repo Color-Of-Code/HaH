@@ -21,12 +21,8 @@ rules:
       - type: any
         severity: Info
         conditions:
-          - type: non_empty
-            value: "$disabled_lines"
-            severity: Info
-          - type: non_empty
-            value: "$excess_revisions"
-            severity: Info
+          - info: "$disabled_lines"
+          - info: "$excess_revisions"
 
     outcome:
       finding_id: snap-health

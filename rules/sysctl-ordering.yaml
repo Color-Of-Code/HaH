@@ -13,9 +13,7 @@ rules:
       conflict_list: "$conflicts | join(', ')"
 
     conditions:
-      - type: non_empty
-        value: "$conflicts"
-        severity: Warning
+      - warning: "$conflicts"
 
     outcome:
       finding_id: sysctl-ordering

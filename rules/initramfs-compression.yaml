@@ -20,16 +20,8 @@ rules:
       - type: all
         severity: Info
         conditions:
-          - type: numeric_threshold
-            value: "$zstd_count"
-            operator: eq
-            threshold: "0"
-            severity: Info
-          - type: numeric_threshold
-            value: "$lz4_count"
-            operator: eq
-            threshold: "0"
-            severity: Info
+          - info: "$zstd_count == 0"
+          - info: "$lz4_count == 0"
 
     outcome:
       finding_id: initramfs-compression-suboptimal

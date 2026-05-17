@@ -19,9 +19,7 @@ rules:
       packages: "$rc_packages | join(' ')"
 
     conditions:
-      - type: non_empty
-        value: "$rc_packages"
-        severity: Info
+      - info: "$rc_packages"
 
     outcome:
       finding_id: residual-config

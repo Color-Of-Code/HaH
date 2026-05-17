@@ -39,21 +39,12 @@ rules:
       - type: all
         severity: Warning
         conditions:
-          - type: equals
-            value: "$ntp_installed"
-            expected: true
-            severity: Warning
+          - warning: "$ntp_installed == true"
           - type: any
             severity: Warning
             conditions:
-              - type: equals
-                value: "$chrony_active"
-                expected: true
-                severity: Warning
-              - type: equals
-                value: "$timesyncd_active"
-                expected: true
-                severity: Warning
+              - warning: "$chrony_active == true"
+              - warning: "$timesyncd_active == true"
 
     outcome:
       finding_id: legacy-ntp
@@ -89,18 +80,9 @@ rules:
       - type: all
         severity: Info
         conditions:
-          - type: equals
-            value: "$ntp_installed"
-            expected: true
-            severity: Info
-          - type: equals
-            value: "$chrony_active"
-            expected: false
-            severity: Info
-          - type: equals
-            value: "$timesyncd_active"
-            expected: false
-            severity: Info
+          - info: "$ntp_installed == true"
+          - info: "$chrony_active != true"
+          - info: "$timesyncd_active != true"
 
     outcome:
       finding_id: legacy-ntp

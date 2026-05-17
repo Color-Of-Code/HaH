@@ -15,9 +15,7 @@ rules:
       stale_list: "$stale_headers | join(', ')"
 
     conditions:
-      - type: non_empty
-        value: "$stale_headers"
-        severity: Info
+      - info: "$stale_headers"
 
     outcome:
       finding_id: stale-kernel-headers
