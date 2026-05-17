@@ -205,9 +205,10 @@ conditions:
   - critical: "$free_mb < 50"             # numeric threshold (lt)
   - info: "$enabled == true"              # boolean equality
   - warning: "$status != true"            # boolean inequality (becomes equals false)
+  - warning: "$status =~ '^overlap:'"     # regex match
 ```
 
-Supported operators: `>`, `>=`, `<`, `<=`, `==`, `!=`. When no operator is present, the
+Supported operators: `>`, `>=`, `<`, `<=`, `==`, `!=`, `=~`. When no operator is present, the
 expression is treated as a `non_empty` check on the pipeline result.
 
 Use `all:` and `any:` to combine conditions. Severity is auto-derived as the maximum severity

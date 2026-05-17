@@ -554,6 +554,7 @@ fn compare_token_to_op(tok: CompareToken) -> CompareOp {
         CompareToken::Eq => CompareOp::Eq,
         CompareToken::Gt => CompareOp::Gt,
         CompareToken::Lt => CompareOp::Lt,
+        CompareToken::Match => unreachable!("Match handled before compare_token_to_op"),
     }
 }
 
@@ -563,6 +564,15 @@ fn build_from_compact_expr(
 ) -> std::result::Result<RuleCondition, String> {
     match parse_condition_expr(expr) {
         ConditionExpr::Compare { lhs, op, rhs } => {
+            // Regex match: `$value =~ "^pattern"`
+            if op == CompareToken::Match {
+                let pattern = strip_quotes(&rhs);
+                return Ok(RuleCondition::RegexMatch {
+                    value: lhs,
+                    pattern,
+                    severity,
+                });
+            }
             // Check for bool equality: `$x == true`, `$x != false`, etc.
             if matches!(op, CompareToken::Eq | CompareToken::Neq)
                 && let Some(cond) = try_bool_equals(&lhs, op, &rhs, &severity)
@@ -580,6 +590,16 @@ fn build_from_compact_expr(
             value: pipeline,
             severity,
         }),
+    }
+}
+
+/// Strip surrounding single or double quotes from a string, if present.
+fn strip_quotes(s: &str) -> String {
+    let s = s.trim();
+    if (s.starts_with('"') && s.ends_with('"')) || (s.starts_with('\'') && s.ends_with('\'')) {
+        s[1..s.len() - 1].to_string()
+    } else {
+        s.to_string()
     }
 }
 
@@ -2387,6 +2407,64 @@ rules:
             assert!(matches!(&conditions[1], RuleCondition::Any { .. }));
         } else {
             panic!("expected All, got {cond:?}");
+        }
+    }
+
+    #[test]
+    fn compact_condition_regex_match() {
+        let yaml = r#"
+rules:
+  - id: t
+    title: T
+    conditions:
+      - warning: "$status =~ '^overlap:'"
+    outcome:
+      finding_id: t
+      title: T
+      description: ""
+"#;
+        let check = make_check(yaml);
+        let cond = &check.rule.conditions[0];
+        if let RuleCondition::RegexMatch {
+            value,
+            pattern,
+            severity,
+        } = cond
+        {
+            assert_eq!(value, "$status");
+            assert_eq!(pattern, "^overlap:");
+            assert_eq!(*severity, Severity::Warning);
+        } else {
+            panic!("expected RegexMatch, got {cond:?}");
+        }
+    }
+
+    #[test]
+    fn compact_condition_regex_match_double_quotes() {
+        let yaml = r#"
+rules:
+  - id: t
+    title: T
+    conditions:
+      - info: '$line =~ "^COMPRESS=lz4"'
+    outcome:
+      finding_id: t
+      title: T
+      description: ""
+"#;
+        let check = make_check(yaml);
+        let cond = &check.rule.conditions[0];
+        if let RuleCondition::RegexMatch {
+            value,
+            pattern,
+            severity,
+        } = cond
+        {
+            assert_eq!(value, "$line");
+            assert_eq!(pattern, "^COMPRESS=lz4");
+            assert_eq!(*severity, Severity::Info);
+        } else {
+            panic!("expected RegexMatch, got {cond:?}");
         }
     }
 

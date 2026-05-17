@@ -31,12 +31,13 @@ pub enum CompareToken {
     Eq,
     Gt,
     Lt,
+    Match,
 }
 
 /// Parse a compact condition expression string.
 ///
 /// Splits on comparison operators (trying longest first: `>=`, `<=`, `!=`,
-/// `==`, `>`, `<`).  If no operator is found, returns [`ConditionExpr::Bare`].
+/// `==`, `=~`, `>`, `<`).  If no operator is found, returns [`ConditionExpr::Bare`].
 pub fn parse_condition_expr(input: &str) -> ConditionExpr {
     // Operators ordered longest-first to avoid `>` matching inside `>=`.
     const OPS: &[(&str, CompareToken)] = &[
@@ -44,6 +45,7 @@ pub fn parse_condition_expr(input: &str) -> ConditionExpr {
         ("<=", CompareToken::Lte),
         ("!=", CompareToken::Neq),
         ("==", CompareToken::Eq),
+        ("=~", CompareToken::Match),
         (">", CompareToken::Gt),
         ("<", CompareToken::Lt),
     ];
@@ -270,6 +272,19 @@ mod tests {
                 lhs: "$x".into(),
                 op: CompareToken::Eq,
                 rhs: "'> 5'".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn parse_condition_regex_match() {
+        let result = parse_condition_expr("$status =~ '^overlap:'");
+        assert_eq!(
+            result,
+            ConditionExpr::Compare {
+                lhs: "$status".into(),
+                op: CompareToken::Match,
+                rhs: "'^overlap:'".into(),
             }
         );
     }

@@ -12,14 +12,8 @@ rules:
           type: legacy_network_interfaces
 
     conditions:
-      - type: regex_match
-        value: "{{ net_status }}"
-        pattern: "^overlap:"
-        severity: Warning
-      - type: regex_match
-        value: "{{ net_status }}"
-        pattern: "^legacy:"
-        severity: Info
+      - warning: "$net_status =~ '^overlap:'"
+      - info: "$net_status =~ '^legacy:'"
 
     outcome:
       finding_id: legacy-network-interfaces
