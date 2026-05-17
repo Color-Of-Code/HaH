@@ -28,6 +28,7 @@ fn apply_list(
         Filter::Join(s) => Ok(list::join(value, s)),
         Filter::GroupCount(n) => Ok(list::group_count(value, *n)),
         Filter::WhereGt(threshold) => Ok(list::where_gt(value, *threshold)),
+        Filter::Intersect(other) => Ok(list::intersect(value, other)),
         _ => Err((value, filter)),
     }
 }

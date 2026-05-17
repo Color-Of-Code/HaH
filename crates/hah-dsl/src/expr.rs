@@ -70,6 +70,10 @@ fn build_filter(name: &str, args: Vec<RuleValue>) -> Result<Filter> {
     if let Some(f) = str_arg_filter(name, &args)? {
         return Ok(f);
     }
+    // Filters that take a list argument
+    if let Some(f) = list_arg_filter(name, &args)? {
+        return Ok(f);
+    }
     Err(anyhow!("Unknown filter: {}", name))
 }
 
@@ -130,6 +134,20 @@ fn str_arg_filter(name: &str, args: &[RuleValue]) -> Result<Option<Filter>> {
         _ => return Ok(None),
     };
     Ok(Some(ctor(require_str_arg(name, args)?.to_string())))
+}
+
+fn list_arg_filter(name: &str, args: &[RuleValue]) -> Result<Option<Filter>> {
+    match name {
+        "intersect" => {
+            let items = args
+                .first()
+                .and_then(RuleValue::as_list)
+                .ok_or_else(|| anyhow!("intersect requires a list argument"))?;
+            let strings: Vec<String> = items.iter().map(RuleValue::display).collect();
+            Ok(Some(Filter::Intersect(strings)))
+        }
+        _ => Ok(None),
+    }
 }
 
 #[cfg(test)]
@@ -409,6 +427,47 @@ mod tests {
     fn filter_skip_missing_arg_errors() {
         let expr = Expression::Filter {
             name: "skip".into(),
+            args: vec![],
+        };
+        assert!(expr.eval(&HashMap::new()).is_err());
+    }
+
+    #[test]
+    fn filter_intersect_keeps_common_items() {
+        let values = map_of(&[
+            (
+                "input",
+                RuleValue::List(vec![
+                    RuleValue::Str("firefox".into()),
+                    RuleValue::Str("chromium".into()),
+                    RuleValue::Str("vscode".into()),
+                ]),
+            ),
+            (
+                "other",
+                RuleValue::List(vec![
+                    RuleValue::Str("chromium".into()),
+                    RuleValue::Str("vim".into()),
+                ]),
+            ),
+        ]);
+        let expr = Expression::Pipeline(vec![
+            Expression::Variable("input".into()),
+            Expression::Filter {
+                name: "intersect".into(),
+                args: vec![Expression::Variable("other".into())],
+            },
+        ]);
+        assert_eq!(
+            expr.eval(&values).unwrap(),
+            RuleValue::List(vec![RuleValue::Str("chromium".into())])
+        );
+    }
+
+    #[test]
+    fn filter_intersect_missing_arg_errors() {
+        let expr = Expression::Filter {
+            name: "intersect".into(),
             args: vec![],
         };
         assert!(expr.eval(&HashMap::new()).is_err());

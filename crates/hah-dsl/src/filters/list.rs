@@ -1,6 +1,6 @@
 use crate::pipeline::RuleValue;
 use anyhow::{Result, anyhow};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 pub fn non_empty(value: RuleValue) -> Result<RuleValue> {
     match value {
@@ -141,6 +141,21 @@ pub fn where_gt(value: RuleValue, threshold: i64) -> Result<RuleValue> {
                 .collect(),
         )),
         other => Err(anyhow!("where_gt: expected a list, got {:?}", other)),
+    }
+}
+
+/// Set intersection: keep only items whose display form appears in `other`.
+pub fn intersect(value: RuleValue, other: &[String]) -> Result<RuleValue> {
+    match value {
+        RuleValue::List(v) => {
+            let set: HashSet<&str> = other.iter().map(String::as_str).collect();
+            Ok(RuleValue::List(
+                v.into_iter()
+                    .filter(|item| set.contains(item.display().as_str()))
+                    .collect(),
+            ))
+        }
+        other_val => Err(anyhow!("intersect: expected a list, got {:?}", other_val)),
     }
 }
 
@@ -314,5 +329,30 @@ mod tests {
     #[test]
     fn where_gt_err_on_non_list() {
         assert!(where_gt(sv("x"), 1).is_err());
+    }
+
+    #[test]
+    fn intersect_keeps_common_items() {
+        let input = list(&["firefox", "chromium", "vscode"]);
+        let other = vec![
+            "chromium".to_string(),
+            "vscode".to_string(),
+            "vim".to_string(),
+        ];
+        let result = intersect(input, &other).unwrap();
+        assert_eq!(result, list(&["chromium", "vscode"]));
+    }
+
+    #[test]
+    fn intersect_returns_empty_when_no_overlap() {
+        let input = list(&["a", "b"]);
+        let other = vec!["c".to_string(), "d".to_string()];
+        let result = intersect(input, &other).unwrap();
+        assert_eq!(result, RuleValue::List(vec![]));
+    }
+
+    #[test]
+    fn intersect_err_on_non_list() {
+        assert!(intersect(sv("x"), &["y".to_string()]).is_err());
     }
 }

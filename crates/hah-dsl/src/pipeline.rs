@@ -118,6 +118,7 @@ pub enum Filter {
     IContains(String),
     GroupCount(usize),
     WhereGt(i64),
+    Intersect(Vec<String>),
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
