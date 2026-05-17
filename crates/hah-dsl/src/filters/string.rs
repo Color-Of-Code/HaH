@@ -1,0 +1,274 @@
+use crate::pipeline::RuleValue;
+use anyhow::{Result, anyhow};
+
+pub fn trim(value: RuleValue) -> Result<RuleValue> {
+    match value {
+        RuleValue::Str(s) => Ok(RuleValue::Str(s.trim().to_string())),
+        RuleValue::List(v) => Ok(RuleValue::List(
+            v.into_iter()
+                .map(|item| match item {
+                    RuleValue::Str(s) => RuleValue::Str(s.trim().to_string()),
+                    other => other,
+                })
+                .collect(),
+        )),
+        other => Err(anyhow!("trim: expected a string or list, got {:?}", other)),
+    }
+}
+
+pub fn lines(value: RuleValue) -> Result<RuleValue> {
+    match value {
+        RuleValue::Str(s) => Ok(RuleValue::List(
+            s.lines()
+                .map(|line| RuleValue::Str(line.to_string()))
+                .collect(),
+        )),
+        other => Err(anyhow!("lines: expected a string, got {:?}", other)),
+    }
+}
+
+pub fn field(value: RuleValue, n: usize) -> Result<RuleValue> {
+    match value {
+        RuleValue::Str(s) => {
+            let fields: Vec<&str> = s.split_whitespace().collect();
+            Ok(fields
+                .get(n)
+                .map_or(RuleValue::Null, |f| RuleValue::Str(f.to_string())))
+        }
+        RuleValue::List(v) => Ok(RuleValue::List(
+            v.into_iter()
+                .map(|item| match item {
+                    RuleValue::Str(s) => {
+                        let fields: Vec<&str> = s.split_whitespace().collect();
+                        fields
+                            .get(n)
+                            .map_or(RuleValue::Null, |f| RuleValue::Str(f.to_string()))
+                    }
+                    other => other,
+                })
+                .collect(),
+        )),
+        other => Err(anyhow!("field: expected a string or list, got {:?}", other)),
+    }
+}
+
+pub fn prefix_strip(value: RuleValue, prefix: &str) -> Result<RuleValue> {
+    match value {
+        RuleValue::Str(s) => Ok(RuleValue::Str(
+            s.strip_prefix(prefix).unwrap_or(&s).to_string(),
+        )),
+        RuleValue::List(v) => Ok(RuleValue::List(
+            v.into_iter()
+                .map(|item| match item {
+                    RuleValue::Str(s) => {
+                        RuleValue::Str(s.strip_prefix(prefix).unwrap_or(&s).to_string())
+                    }
+                    other => other,
+                })
+                .collect(),
+        )),
+        other => Err(anyhow!(
+            "prefix_strip: expected a string or list, got {:?}",
+            other
+        )),
+    }
+}
+
+pub fn starts_with(value: RuleValue, prefix: &str) -> Result<RuleValue> {
+    match value {
+        RuleValue::List(v) => Ok(RuleValue::List(
+            v.into_iter()
+                .filter(|item| match item {
+                    RuleValue::Str(s) => s.starts_with(prefix),
+                    _ => false,
+                })
+                .collect(),
+        )),
+        RuleValue::Str(s) => Ok(if s.starts_with(prefix) {
+            RuleValue::Str(s)
+        } else {
+            RuleValue::Null
+        }),
+        other => Err(anyhow!(
+            "starts_with: expected a list or string, got {:?}",
+            other
+        )),
+    }
+}
+
+pub fn contains(value: &RuleValue, substring: &str) -> Result<RuleValue> {
+    match value {
+        RuleValue::List(v) => Ok(RuleValue::Bool(v.iter().any(|item| match item {
+            RuleValue::Str(s) => s.contains(substring),
+            _ => false,
+        }))),
+        RuleValue::Str(s) => Ok(RuleValue::Bool(s.contains(substring))),
+        _ => Ok(RuleValue::Bool(false)),
+    }
+}
+
+pub fn reject_contains(value: RuleValue, substring: &str) -> Result<RuleValue> {
+    match value {
+        RuleValue::List(v) => Ok(RuleValue::List(
+            v.into_iter()
+                .filter(|item| match item {
+                    RuleValue::Str(s) => !s.contains(substring),
+                    _ => true,
+                })
+                .collect(),
+        )),
+        other => Err(anyhow!("reject_contains: expected a list, got {:?}", other)),
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    fn sv(s: &str) -> RuleValue {
+        RuleValue::Str(s.to_string())
+    }
+    fn list(items: &[&str]) -> RuleValue {
+        RuleValue::List(items.iter().copied().map(sv).collect())
+    }
+
+    #[test]
+    fn trim_string() {
+        assert_eq!(trim(sv("  hello  ")).unwrap(), sv("hello"));
+    }
+
+    #[test]
+    fn trim_list() {
+        assert_eq!(trim(list(&["  a  ", " b"])).unwrap(), list(&["a", "b"]));
+    }
+
+    #[test]
+    fn trim_err_on_non_str_non_list() {
+        assert!(trim(RuleValue::Int(1)).is_err());
+    }
+
+    #[test]
+    fn lines_splits_on_newlines() {
+        assert_eq!(lines(sv("a\nb\nc")).unwrap(), list(&["a", "b", "c"]));
+    }
+
+    #[test]
+    fn lines_err_on_non_str() {
+        assert!(lines(RuleValue::Int(1)).is_err());
+    }
+
+    #[test]
+    fn field_returns_nth_word() {
+        assert_eq!(field(sv("hello world foo"), 1).unwrap(), sv("world"));
+    }
+
+    #[test]
+    fn field_out_of_range_returns_null() {
+        assert_eq!(field(sv("a"), 5).unwrap(), RuleValue::Null);
+    }
+
+    #[test]
+    fn field_on_list_applies_per_element() {
+        assert_eq!(field(list(&["a b", "c d"]), 1).unwrap(), list(&["b", "d"]));
+    }
+
+    #[test]
+    fn field_err_on_non_str_non_list() {
+        assert!(field(RuleValue::Int(1), 0).is_err());
+    }
+
+    #[test]
+    fn prefix_strip_str() {
+        assert_eq!(
+            prefix_strip(sv("linux-5.15"), "linux-").unwrap(),
+            sv("5.15")
+        );
+    }
+
+    #[test]
+    fn prefix_strip_no_match_unchanged() {
+        assert_eq!(prefix_strip(sv("other"), "linux-").unwrap(), sv("other"));
+    }
+
+    #[test]
+    fn prefix_strip_list() {
+        assert_eq!(
+            prefix_strip(list(&["linux-1", "other"]), "linux-").unwrap(),
+            list(&["1", "other"])
+        );
+    }
+
+    #[test]
+    fn prefix_strip_err_on_non_str_non_list() {
+        assert!(prefix_strip(RuleValue::Int(1), "x").is_err());
+    }
+
+    #[test]
+    fn starts_with_filters_list() {
+        assert_eq!(
+            starts_with(list(&["linux-5", "headers-5", "linux-6"]), "linux-").unwrap(),
+            list(&["linux-5", "linux-6"])
+        );
+    }
+
+    #[test]
+    fn starts_with_str_matches() {
+        assert_eq!(starts_with(sv("linux-5"), "linux-").unwrap(), sv("linux-5"));
+    }
+
+    #[test]
+    fn starts_with_str_no_match_returns_null() {
+        assert_eq!(starts_with(sv("other"), "linux-").unwrap(), RuleValue::Null);
+    }
+
+    #[test]
+    fn starts_with_err_on_non_str_non_list() {
+        assert!(starts_with(RuleValue::Int(1), "x").is_err());
+    }
+
+    #[test]
+    fn contains_list_found() {
+        assert_eq!(
+            contains(&list(&["hello", "world"]), "world").unwrap(),
+            RuleValue::Bool(true)
+        );
+    }
+
+    #[test]
+    fn contains_list_not_found() {
+        assert_eq!(
+            contains(&list(&["hello"]), "missing").unwrap(),
+            RuleValue::Bool(false)
+        );
+    }
+
+    #[test]
+    fn contains_str_found() {
+        assert_eq!(
+            contains(&sv("hello world"), "world").unwrap(),
+            RuleValue::Bool(true)
+        );
+    }
+
+    #[test]
+    fn contains_non_str_returns_false() {
+        assert_eq!(
+            contains(&RuleValue::Int(1), "x").unwrap(),
+            RuleValue::Bool(false)
+        );
+    }
+
+    #[test]
+    fn reject_contains_filters_list() {
+        assert_eq!(
+            reject_contains(list(&["keep", "drop-this", "keep2"]), "drop").unwrap(),
+            list(&["keep", "keep2"])
+        );
+    }
+
+    #[test]
+    fn reject_contains_err_on_non_list() {
+        assert!(reject_contains(sv("x"), "x").is_err());
+    }
+}
