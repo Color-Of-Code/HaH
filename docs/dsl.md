@@ -74,6 +74,11 @@ triggers:
     probe:
       type: file_size
       path: /etc/apt/trusted.gpg
+
+  - name: resolv_target
+    probe:
+      type: symlink_target
+      path: /etc/resolv.conf
 ```
 
 ### File trigger
@@ -152,6 +157,8 @@ condition operands.
 | `bytes_to_mb` | Divide a byte count integer by 1 048 576 and return an `Int` |
 | `group_count(n)` | Group list items by whitespace-field _n_, return `"count key"` strings |
 | `where_gt(n)` | Keep only items whose first field (parsed as int) exceeds _n_ |
+| `intersect($var)` | Set intersection: keep only items whose value appears in the list variable _$var_ |
+| `reject_in($var)` | Set subtraction: remove items whose value appears in the list variable _$var_ |
 
 ---
 
@@ -178,6 +185,7 @@ values:
 | `regex_match` | Match a string against a regular expression |
 | `all` | Logical AND of a list of child conditions |
 | `any` | Logical OR of a list of child conditions |
+| `for_each` | Iterate over a list and produce one finding per item |
 
 Every condition requires a `severity` (`Info`, `Warning`, or `Critical`).
 
@@ -188,6 +196,11 @@ conditions:
     operator: lt
     threshold: "$threshold_bytes"
     severity: Critical
+
+  - type: for_each
+    source: "$duplicates"
+    item_var: pkg
+    severity: Warning
 
   - type: all
     severity: Warning
@@ -308,6 +321,9 @@ See [`rules/`](../rules/) for the default rule set shipped with HaH:
 | `autoremovable.yaml` | Command trigger, `non_empty`, list pipeline |
 | `residual-config.yaml` | `starts_with` / `prefix_strip`, block reuse |
 | `legacy-ntp.yaml` | Multi-probe rule, `all` / `any` conditions |
+| `snap-apt-duplicate.yaml` | `intersect`, `reject_in`, `for_each` multi-finding |
+| `resolved-config.yaml` | `symlink_target` probe, `contains` condition |
+| `old-crash-dumps.yaml` | `old_files` capability, `for_each` per-item findings |
 | `journal-size.yaml` | `journal_usage` capability |
 | `sysctl-ordering.yaml` | `sysctl_conflicts` capability |
 | `unused-kernels.yaml` | `kernel_inventory` capability, `reject_contains` |
