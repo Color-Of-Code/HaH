@@ -24,7 +24,6 @@ HaH is organized as a Cargo workspace:
 - [DSL Language Reference](../dsl.md)
 - [Utilities Library (hah-utils)](utils.md)
 - [Project Plan](plan.md)
-- [Roadmap](roadmap.md)
 
 ## Development Workflow
 
