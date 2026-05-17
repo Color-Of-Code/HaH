@@ -235,6 +235,14 @@ pub enum CapabilitySpec {
     StaleKernelHeaders,
     JournalUsage,
     NtpActiveServices,
+    LargeInitramfs {
+        #[serde(default = "default_initramfs_threshold")]
+        threshold_mb: u64,
+    },
+}
+
+fn default_initramfs_threshold() -> u64 {
+    100
 }
 
 // ── Conditions ────────────────────────────────────────────────────────────────
@@ -574,6 +582,9 @@ fn dispatch_capability(spec: &CapabilitySpec, ctx: &Context) -> Result<RuleValue
             capabilities::stale_kernel_headers(ctx.runner.as_ref())
         }
         CapabilitySpec::NtpActiveServices => capabilities::ntp_active_services(ctx.runner.as_ref()),
+        CapabilitySpec::LargeInitramfs { threshold_mb } => {
+            capabilities::large_initramfs(*threshold_mb)
+        }
     }
 }
 

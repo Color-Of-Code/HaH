@@ -1,0 +1,23 @@
+rules:
+  - id: initramfs-size
+    title: Oversized initramfs images
+    triggers:
+      - name: large_images
+        capability:
+          type: large_initramfs
+          threshold_mb: 100
+    conditions:
+      - type: for_each
+        source: "$large_images"
+        item_var: entry
+        severity: Warning
+    outcome:
+      finding_id: "initramfs-large-{entry}"
+      title: "Oversized initramfs: {entry} MB"
+      description: >-
+        initramfs image {entry} exceeds the threshold.
+        Large images slow boot and consume /boot space.
+      remediation:
+        description: Regenerate initramfs images.
+        commands:
+          - "sudo update-initramfs -u -k all"

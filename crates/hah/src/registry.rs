@@ -1,6 +1,5 @@
 use hah_checks::{
     apt::{LegacySourcesFormatCheck, UserDefinedPackageCheck},
-    boot::InitramfsCheck,
     network::LegacyNetworkInterfacesCheck,
 };
 use hah_core::{check::Check, config::Config};
@@ -32,7 +31,6 @@ fn rule_search_dirs(config: &Config) -> Vec<PathBuf> {
 pub(crate) fn all_checks(config: &Config) -> Vec<Box<dyn Check>> {
     // Compiled checks for logic too complex for the declarative DSL.
     let mut checks: Vec<Box<dyn Check>> = vec![
-        Box::new(InitramfsCheck),
         Box::new(LegacySourcesFormatCheck),
         Box::new(UserDefinedPackageCheck),
         Box::new(LegacyNetworkInterfacesCheck),
