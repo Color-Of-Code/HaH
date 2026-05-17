@@ -1,0 +1,35 @@
+rules:
+  - id: resolved-config
+    title: "systemd-resolved DNS resolver configuration"
+    triggers:
+      - name: resolved_active
+        probe:
+          type: service_active
+          name: systemd-resolved
+      - name: target
+        probe:
+          type: symlink_target
+          path: /etc/resolv.conf
+    conditions:
+      - type: all
+        severity: Warning
+        conditions:
+          - type: equals
+            value: "$resolved_active"
+            expected: true
+            severity: Warning
+          - type: equals
+            value: "$target | contains('systemd/resolve')"
+            expected: false
+            severity: Warning
+    outcome:
+      finding_id: resolved-config
+      title: "/etc/resolv.conf is not linked to systemd-resolved"
+      description: >-
+        systemd-resolved is active but /etc/resolv.conf is not a symlink
+        to /run/systemd/resolve/stub-resolv.conf. DNS caching, DNSSEC
+        validation, and split-DNS will not work correctly.
+      remediation:
+        description: Link /etc/resolv.conf to the systemd-resolved stub resolver.
+        commands:
+          - "sudo ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf"

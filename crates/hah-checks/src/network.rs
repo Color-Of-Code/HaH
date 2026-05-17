@@ -189,71 +189,6 @@ pub(crate) fn legacy_interfaces_finding(
     })
 }
 
-// ── ResolvedConfigCheck ───────────────────────────────────────────────────────
-/// Detects a misconfigured /etc/resolv.conf on systems where systemd-resolved
-/// is active. The file should be a symlink to the stub resolver so that
-/// DNS caching, DNSSEC validation, and per-link DNS settings work correctly.
-pub struct ResolvedConfigCheck;
-
-impl Check for ResolvedConfigCheck {
-    fn id(&self) -> &str {
-        "resolved-config"
-    }
-
-    fn title(&self) -> &str {
-        "systemd-resolved DNS resolver configuration"
-    }
-
-    fn run(&self, ctx: &Context) -> CheckResult {
-        if !is_service_active(ctx.runner.as_ref(), "systemd-resolved") {
-            return CheckResult::default();
-        }
-
-        let resolv = Path::new("/etc/resolv.conf");
-        let correct_targets = [
-            "/run/systemd/resolve/stub-resolv.conf",
-            "../run/systemd/resolve/stub-resolv.conf",
-        ];
-
-        let is_correct = resolv.is_symlink()
-            && fs::read_link(resolv).is_ok_and(|t| {
-                let s = t.to_string_lossy().into_owned();
-                correct_targets.iter().any(|ok| s == *ok) || s.contains("systemd/resolve")
-            });
-
-        if is_correct {
-            return CheckResult::default();
-        }
-
-        let current = if resolv.is_symlink() {
-            fs::read_link(resolv).map_or_else(
-                |_| "an unreadable symlink".into(),
-                |t| format!("a symlink to {}", t.display()),
-            )
-        } else {
-            "a plain file (not managed by systemd-resolved)".into()
-        };
-
-        CheckResult::default().with_finding(Finding {
-            id: "resolved-config".into(),
-            title: "/etc/resolv.conf is not linked to systemd-resolved".into(),
-            description: format!(
-                "systemd-resolved is active but /etc/resolv.conf is {current}. \
-                 It should be a symlink to /run/systemd/resolve/stub-resolv.conf \
-                 so that DNS caching, DNSSEC validation, and split-DNS work correctly. \
-                 This is a common misconfiguration left over after upgrades."
-            ),
-            severity: Severity::Warning,
-            remediation: Some(Remediation {
-                description: "Link /etc/resolv.conf to the systemd-resolved stub resolver.".into(),
-                commands: vec![
-                    "sudo ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf".into(),
-                ],
-            }),
-        })
-    }
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::if_same_then_else)]
 mod tests {
@@ -480,34 +415,5 @@ mod tests {
         let f = legacy_interfaces_finding(1, true, true).unwrap();
         assert_eq!(f.severity, Severity::Warning);
         assert!(f.description.contains("Netplan and NetworkManager"));
-    }
-
-    // ── ResolvedConfigCheck ───────────────────────────────────────────────────
-
-    #[test]
-    fn resolved_config_check_id_and_title() {
-        assert_eq!(ResolvedConfigCheck.id(), "resolved-config");
-        assert!(!ResolvedConfigCheck.title().is_empty());
-    }
-
-    #[test]
-    fn resolved_config_skips_when_resolved_inactive() {
-        let mut runner = MockRunner::new();
-        runner.expect_run().returning(|_, _| Ok(failure_output()));
-        assert!(
-            ResolvedConfigCheck
-                .run(&make_ctx(Arc::new(runner), "any"))
-                .findings
-                .is_empty()
-        );
-    }
-
-    #[test]
-    fn resolved_config_active_resolved_runs_without_panic() {
-        // systemd-resolved is active → check reads /etc/resolv.conf
-        let mut runner = MockRunner::new();
-        runner.expect_run().returning(|_, _| Ok(success_output()));
-        let ctx = make_ctx(Arc::new(runner), "any");
-        let _ = ResolvedConfigCheck.run(&ctx);
     }
 }

@@ -207,6 +207,11 @@ pub enum ProbeSpec {
     FileSize {
         path: String,
     },
+    /// Returns the symlink target as a `Str`, or `Null` if the path is not
+    /// a symlink or does not exist.
+    SymlinkTarget {
+        path: String,
+    },
 }
 
 /// Rust-backed capability trigger (complex analysis delegated to Rust).
@@ -584,6 +589,10 @@ fn run_probe(spec: &ProbeSpec, ctx: &Context) -> RuleValue {
         ),
         ProbeSpec::FileSize { path } => std::fs::metadata(path)
             .map_or(RuleValue::Null, |meta| RuleValue::Int(meta.len() as i64)),
+        ProbeSpec::SymlinkTarget { path } => std::fs::read_link(path)
+            .map_or(RuleValue::Null, |target| {
+                RuleValue::Str(target.to_string_lossy().into_owned())
+            }),
     }
 }
 
@@ -1756,5 +1765,28 @@ rules:
             .eval_for_each("$items", "item", &Severity::Warning, &values)
             .unwrap();
         assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn symlink_target_probe_returns_null_for_nonexistent() {
+        let spec = ProbeSpec::SymlinkTarget {
+            path: "/tmp/nonexistent-hah-test-link-xyz".into(),
+        };
+        let ctx = Context::new(false, Config::default(), DistroInfo::default());
+        let result = run_probe(&spec, &ctx);
+        assert_eq!(result, RuleValue::Null);
+    }
+
+    #[test]
+    fn symlink_target_probe_returns_target_for_symlink() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let link_path = dir.path().join("mylink");
+        std::os::unix::fs::symlink("/some/target", &link_path).expect("symlink");
+        let spec = ProbeSpec::SymlinkTarget {
+            path: link_path.to_string_lossy().into_owned(),
+        };
+        let ctx = Context::new(false, Config::default(), DistroInfo::default());
+        let result = run_probe(&spec, &ctx);
+        assert_eq!(result, RuleValue::Str("/some/target".into()));
     }
 }
