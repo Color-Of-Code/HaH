@@ -40,10 +40,18 @@ impl RuleValue {
 
     /// Return the value as an `i64`, parsing from a string if necessary.
     pub fn as_int(&self) -> Option<i64> {
+        self.try_int().ok()
+    }
+
+    /// Return the value as an `i64`, parsing from a string if necessary.
+    pub fn try_int(&self) -> Result<i64> {
         match self {
-            Self::Int(n) => Some(*n),
-            Self::Str(s) => s.trim().parse().ok(),
-            _ => None,
+            Self::Int(n) => Ok(*n),
+            Self::Str(s) => s
+                .trim()
+                .parse()
+                .map_err(|_| anyhow!("Not a number: '{}'", s)),
+            _ => Err(anyhow!("Cannot convert {:?} to number", self)),
         }
     }
 
@@ -63,6 +71,11 @@ impl RuleValue {
         } else {
             None
         }
+    }
+
+    /// Whether the value should be treated as absent for defaulting.
+    pub fn is_blank(&self) -> bool {
+        matches!(self, Self::Null) || matches!(self, Self::Str(s) if s.is_empty())
     }
 
     /// Human-readable form used in template substitution and `join`.
@@ -260,5 +273,18 @@ mod tests {
         assert_eq!(RuleValue::Str("7".into()).as_int(), Some(7));
         assert_eq!(RuleValue::Null.as_int(), None);
         assert_eq!(RuleValue::Bool(true).as_int(), None);
+    }
+
+    #[test]
+    fn rule_value_try_int_and_blank_helpers() {
+        assert_eq!(RuleValue::Int(5).try_int().unwrap(), 5);
+        assert_eq!(RuleValue::Str(" 7 ".into()).try_int().unwrap(), 7);
+        assert!(RuleValue::Str("abc".into()).try_int().is_err());
+        assert!(RuleValue::Bool(true).try_int().is_err());
+
+        assert!(RuleValue::Null.is_blank());
+        assert!(RuleValue::Str(String::new()).is_blank());
+        assert!(!RuleValue::Str("x".into()).is_blank());
+        assert!(!RuleValue::Int(0).is_blank());
     }
 }

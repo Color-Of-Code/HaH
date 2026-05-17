@@ -2,34 +2,19 @@ use crate::pipeline::RuleValue;
 use anyhow::{Result, anyhow};
 
 pub fn number(value: RuleValue) -> Result<RuleValue> {
-    match value {
-        RuleValue::Int(_) => Ok(value),
-        RuleValue::Str(s) => {
-            let n: i64 = s
-                .trim()
-                .parse()
-                .map_err(|_| anyhow!("Not a number: '{}'", s))?;
-            Ok(RuleValue::Int(n))
-        }
-        _ => Err(anyhow!("Cannot convert {:?} to number", value)),
-    }
+    Ok(RuleValue::Int(value.try_int()?))
 }
 
 pub fn bytes_to_mb(value: RuleValue) -> Result<RuleValue> {
-    let bytes = match value {
-        RuleValue::Int(n) => n,
-        RuleValue::Str(s) => s
-            .trim()
-            .parse()
-            .map_err(|_| anyhow!("Not a number: '{}'", s))?,
+    let bytes = match &value {
+        RuleValue::Int(_) | RuleValue::Str(_) => value.try_int()?,
         _ => return Err(anyhow!("bytes_to_mb requires a number, got {:?}", value)),
     };
     Ok(RuleValue::Int(bytes / (1024 * 1024)))
 }
 
 pub fn default_val(value: RuleValue, default: String) -> Result<RuleValue> {
-    let is_empty_str = matches!(&value, RuleValue::Str(s) if s.is_empty());
-    if value == RuleValue::Null || is_empty_str {
+    if value.is_blank() {
         Ok(RuleValue::Str(default))
     } else {
         Ok(value)
