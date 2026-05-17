@@ -36,13 +36,9 @@ rules:
           name: systemd-timesyncd
 
     conditions:
-      - type: all
-        severity: Warning
-        conditions:
+      - all:
           - warning: "$ntp_installed == true"
-          - type: any
-            severity: Warning
-            conditions:
+          - any:
               - warning: "$chrony_active == true"
               - warning: "$timesyncd_active == true"
 
@@ -77,9 +73,7 @@ rules:
           name: systemd-timesyncd
 
     conditions:
-      - type: all
-        severity: Info
-        conditions:
+      - all:
           - info: "$ntp_installed == true"
           - info: "$chrony_active != true"
           - info: "$timesyncd_active != true"

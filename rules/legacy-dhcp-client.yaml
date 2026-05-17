@@ -20,13 +20,9 @@ rules:
           name: systemd-networkd
 
     conditions:
-      - type: all
-        severity: Info
-        conditions:
+      - all:
           - info: "$dhclient_installed == true"
-          - type: any
-            severity: Info
-            conditions:
+          - any:
               - info: "$nm_installed == true"
               - info: "$networkd_active == true"
 

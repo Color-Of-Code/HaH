@@ -11,9 +11,7 @@ rules:
           type: symlink_target
           path: /etc/resolv.conf
     conditions:
-      - type: all
-        severity: Warning
-        conditions:
+      - all:
           - warning: "$resolved_active == true"
           - warning: "$target | contains('systemd/resolve') != true"
     outcome:

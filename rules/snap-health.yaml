@@ -18,9 +18,7 @@ rules:
       excess_revisions: "$snap_lines | group_count(0) | where_gt(2)"
 
     conditions:
-      - type: any
-        severity: Info
-        conditions:
+      - any:
           - info: "$disabled_lines"
           - info: "$excess_revisions"
 

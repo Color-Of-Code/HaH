@@ -295,6 +295,21 @@ pub enum RuleCondition {
     },
 }
 
+impl RuleCondition {
+    /// Returns the severity of this condition.
+    pub fn severity(&self) -> Severity {
+        match self {
+            Self::NumericThreshold { severity, .. }
+            | Self::Equals { severity, .. }
+            | Self::NonEmpty { severity, .. }
+            | Self::RegexMatch { severity, .. }
+            | Self::All { severity, .. }
+            | Self::Any { severity, .. }
+            | Self::ForEach { severity, .. } => severity.clone(),
+        }
+    }
+}
+
 // ── Custom Deserialize for RuleCondition ──────────────────────────────────────
 //
 // Supports three input formats (tried in order):
@@ -468,7 +483,8 @@ impl InferredCondition {
     }
 }
 
-/// Compact condition: `{ info: "$x > 0" }` / `{ warning: "$list" }` etc.
+/// Compact condition: `{ info: "$x > 0" }` / `{ warning: "$list" }` /
+/// `{ all: [...] }` / `{ any: [...] }` etc.
 #[derive(Deserialize)]
 struct CompactCondition {
     #[serde(default)]
@@ -477,10 +493,36 @@ struct CompactCondition {
     warning: Option<String>,
     #[serde(default)]
     critical: Option<String>,
+    #[serde(default)]
+    all: Option<Vec<RuleCondition>>,
+    #[serde(default)]
+    any: Option<Vec<RuleCondition>>,
 }
 
 impl CompactCondition {
+    fn is_some(&self) -> bool {
+        self.info.is_some()
+            || self.warning.is_some()
+            || self.critical.is_some()
+            || self.all.is_some()
+            || self.any.is_some()
+    }
+
     fn into_rule_condition(self) -> std::result::Result<RuleCondition, String> {
+        if let Some(conditions) = self.all {
+            let severity = max_severity(&conditions)?;
+            return Ok(RuleCondition::All {
+                conditions,
+                severity,
+            });
+        }
+        if let Some(conditions) = self.any {
+            let severity = max_severity(&conditions)?;
+            return Ok(RuleCondition::Any {
+                conditions,
+                severity,
+            });
+        }
         let (severity, expr) = if let Some(e) = self.info {
             (Severity::Info, e)
         } else if let Some(e) = self.warning {
@@ -488,10 +530,20 @@ impl CompactCondition {
         } else if let Some(e) = self.critical {
             (Severity::Critical, e)
         } else {
-            return Err("compact condition requires info, warning, or critical key".into());
+            return Err(
+                "compact condition requires info, warning, critical, all, or any key".into(),
+            );
         };
         build_from_compact_expr(severity, &expr)
     }
+}
+
+fn max_severity(conditions: &[RuleCondition]) -> std::result::Result<Severity, String> {
+    conditions
+        .iter()
+        .map(RuleCondition::severity)
+        .max()
+        .ok_or_else(|| "all/any requires at least one child condition".to_string())
 }
 
 fn compare_token_to_op(tok: CompareToken) -> CompareOp {
@@ -574,9 +626,9 @@ impl<'de> Deserialize<'de> for RuleCondition {
             return Ok(RuleCondition::from(typed));
         }
 
-        // 2. Try compact (`{ info: "..." }` / `{ warning: "..." }` / ...).
+        // 2. Try compact (`{ info: "..." }` / `{ all: [...] }` / ...).
         if let Ok(compact) = CompactCondition::deserialize(VD::new(value.clone()))
-            && (compact.info.is_some() || compact.warning.is_some() || compact.critical.is_some())
+            && compact.is_some()
         {
             return compact.into_rule_condition().map_err(D::Error::custom);
         }
@@ -2244,6 +2296,97 @@ rules:
             assert_eq!(*severity, Severity::Critical);
         } else {
             panic!("expected NonEmpty, got {cond:?}");
+        }
+    }
+
+    #[test]
+    fn compact_all_with_children() {
+        let yaml = r#"
+rules:
+  - id: t
+    title: T
+    conditions:
+      - all:
+          - warning: "$x == true"
+          - warning: "$y > 5"
+    outcome:
+      finding_id: t
+      title: T
+      description: ""
+"#;
+        let check = make_check(yaml);
+        let cond = &check.rule.conditions[0];
+        if let RuleCondition::All {
+            conditions,
+            severity,
+        } = cond
+        {
+            assert_eq!(*severity, Severity::Warning);
+            assert_eq!(conditions.len(), 2);
+        } else {
+            panic!("expected All, got {cond:?}");
+        }
+    }
+
+    #[test]
+    fn compact_any_with_children() {
+        let yaml = r#"
+rules:
+  - id: t
+    title: T
+    conditions:
+      - any:
+          - info: "$a"
+          - warning: "$b"
+    outcome:
+      finding_id: t
+      title: T
+      description: ""
+"#;
+        let check = make_check(yaml);
+        let cond = &check.rule.conditions[0];
+        if let RuleCondition::Any {
+            conditions,
+            severity,
+        } = cond
+        {
+            // max(Info, Warning) = Warning
+            assert_eq!(*severity, Severity::Warning);
+            assert_eq!(conditions.len(), 2);
+        } else {
+            panic!("expected Any, got {cond:?}");
+        }
+    }
+
+    #[test]
+    fn compact_nested_all_any() {
+        let yaml = r#"
+rules:
+  - id: t
+    title: T
+    conditions:
+      - all:
+          - warning: "$ntp_installed == true"
+          - any:
+              - warning: "$chrony_active == true"
+              - warning: "$timesyncd_active == true"
+    outcome:
+      finding_id: t
+      title: T
+      description: ""
+"#;
+        let check = make_check(yaml);
+        let cond = &check.rule.conditions[0];
+        if let RuleCondition::All {
+            conditions,
+            severity,
+        } = cond
+        {
+            assert_eq!(*severity, Severity::Warning);
+            assert_eq!(conditions.len(), 2);
+            assert!(matches!(&conditions[1], RuleCondition::Any { .. }));
+        } else {
+            panic!("expected All, got {cond:?}");
         }
     }
 

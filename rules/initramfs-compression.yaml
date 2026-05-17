@@ -17,9 +17,7 @@ rules:
       lz4_count:  "$conf_lines | starts_with('COMPRESS=lz4') | count"
 
     conditions:
-      - type: all
-        severity: Info
-        conditions:
+      - all:
           - info: "$zstd_count == 0"
           - info: "$lz4_count == 0"
 

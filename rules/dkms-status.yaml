@@ -17,9 +17,7 @@ rules:
       uninstalled_modules: "$dkms_output | lines | icontains('not installed')"
 
     conditions:
-      - type: any
-        severity: Warning
-        conditions:
+      - any:
           - warning: "$broken_modules"
           - warning: "$uninstalled_modules"
 

@@ -210,6 +210,18 @@ conditions:
 Supported operators: `>`, `>=`, `<`, `<=`, `==`, `!=`. When no operator is present, the
 expression is treated as a `non_empty` check on the pipeline result.
 
+Use `all:` and `any:` to combine conditions. Severity is auto-derived as the maximum severity
+of the children:
+
+```yaml
+conditions:
+  - all:
+      - warning: "$ntp_installed == true"
+      - any:
+          - warning: "$chrony_active == true"
+          - warning: "$timesyncd_active == true"
+```
+
 ### Inferred syntax
 
 Omit the `type:` field and let HaH infer the condition type from the fields present:
