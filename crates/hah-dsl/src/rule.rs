@@ -269,6 +269,13 @@ pub enum RuleCondition {
         conditions: Vec<RuleCondition>,
         severity: Severity,
     },
+    ForEach {
+        /// Pipeline expression that must resolve to a list.
+        source: String,
+        /// Variable name exposed to the outcome template for each item.
+        item_var: String,
+        severity: Severity,
+    },
 }
 
 /// Comparison operator for [`RuleCondition::NumericThreshold`].
@@ -377,12 +384,38 @@ impl Check for RuleBasedCheck {
         }
 
         // ── 5. Evaluate conditions ────────────────────────────────────────────
+        self.eval_conditions(&values)
+    }
+}
+
+// ── Condition loop ────────────────────────────────────────────────────────────
+
+impl RuleBasedCheck {
+    fn eval_conditions(&self, values: &ValueMap) -> CheckResult {
         let mut result = CheckResult::default();
         for condition in &self.rule.conditions {
-            match self.eval_condition(condition, &values) {
+            if let RuleCondition::ForEach {
+                source,
+                item_var,
+                severity,
+            } = condition
+            {
+                match self.eval_for_each(source, item_var, severity, values) {
+                    Ok(findings) => {
+                        for finding in findings {
+                            result = result.with_finding(finding);
+                        }
+                    }
+                    Err(e) => {
+                        result = result.with_error(format!("for_each: {e}"));
+                    }
+                }
+                continue;
+            }
+            match self.eval_condition(condition, values) {
                 Ok(true) => {
                     let severity = condition_severity(condition).clone();
-                    result = result.with_finding(self.make_finding(severity, &values));
+                    result = result.with_finding(self.make_finding(severity, values));
                 }
                 Ok(false) => {}
                 Err(e) => {
@@ -552,7 +585,8 @@ fn condition_severity(condition: &RuleCondition) -> &Severity {
         | RuleCondition::NonEmpty { severity, .. }
         | RuleCondition::RegexMatch { severity, .. }
         | RuleCondition::All { severity, .. }
-        | RuleCondition::Any { severity, .. } => severity,
+        | RuleCondition::Any { severity, .. }
+        | RuleCondition::ForEach { severity, .. } => severity,
     }
 }
 
@@ -633,7 +667,32 @@ impl RuleBasedCheck {
                 }
                 Ok(false)
             }
+
+            RuleCondition::ForEach { .. } => {
+                // ForEach is handled directly in run(); should never reach here.
+                Ok(false)
+            }
         }
+    }
+
+    fn eval_for_each(
+        &self,
+        source: &str,
+        item_var: &str,
+        severity: &Severity,
+        values: &ValueMap,
+    ) -> Result<Vec<Finding>> {
+        let list = eval_expr(source, values)?;
+        let items = list
+            .as_list()
+            .ok_or_else(|| anyhow!("for_each source must be a list"))?;
+        let mut findings = Vec::new();
+        for item in items {
+            let mut local = values.clone();
+            local.insert(item_var.to_string(), item.clone());
+            findings.push(self.make_finding(severity.clone(), &local));
+        }
+        Ok(findings)
     }
 
     // ── Finding generation ────────────────────────────────────────────────────
@@ -1624,5 +1683,67 @@ rules:
         let ctx = Context::new(false, Config::default(), distro);
         let cr = check.run(&ctx);
         assert_eq!(cr.findings.len(), 1);
+    }
+
+    #[test]
+    fn for_each_produces_per_item_findings() {
+        let check = make_check(
+            r#"
+rules:
+  - id: x
+    title: X
+    conditions:
+      - type: for_each
+        source: "$items"
+        item_var: item
+        severity: Warning
+    outcome:
+      finding_id: "item-{item}"
+      title: "Found {item}"
+      description: "Desc for {item}"
+"#,
+        );
+        let mut values: ValueMap = HashMap::new();
+        values.insert(
+            "items".into(),
+            RuleValue::List(vec![
+                RuleValue::Str("alpha".into()),
+                RuleValue::Str("beta".into()),
+            ]),
+        );
+        let findings = check
+            .eval_for_each("$items", "item", &Severity::Warning, &values)
+            .unwrap();
+        assert_eq!(findings.len(), 2);
+        assert_eq!(findings[0].id, "item-alpha");
+        assert_eq!(findings[0].title, "Found alpha");
+        assert_eq!(findings[1].id, "item-beta");
+        assert_eq!(findings[1].title, "Found beta");
+    }
+
+    #[test]
+    fn for_each_empty_list_produces_no_findings() {
+        let check = make_check(
+            r#"
+rules:
+  - id: x
+    title: X
+    conditions:
+      - type: for_each
+        source: "$items"
+        item_var: item
+        severity: Warning
+    outcome:
+      finding_id: "item-{item}"
+      title: "Found {item}"
+      description: ""
+"#,
+        );
+        let mut values: ValueMap = HashMap::new();
+        values.insert("items".into(), RuleValue::List(vec![]));
+        let findings = check
+            .eval_for_each("$items", "item", &Severity::Warning, &values)
+            .unwrap();
+        assert!(findings.is_empty());
     }
 }
