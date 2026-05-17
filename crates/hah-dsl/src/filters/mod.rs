@@ -19,6 +19,7 @@ fn apply_list(
     match filter {
         Filter::NonEmpty => Ok(list::non_empty(value)),
         Filter::First => Ok(list::first(value)),
+        Filter::Last => Ok(list::last(value)),
         Filter::Sort => Ok(list::sort(value)),
         Filter::Unique => Ok(list::unique(value)),
         Filter::Count => Ok(Ok(list::count(&value))),
@@ -41,6 +42,7 @@ fn apply_string(
         Filter::StartsWith(s) => Ok(string::starts_with(value, s)),
         Filter::Contains(s) => Ok(string::contains(&value, s)),
         Filter::RejectContains(s) => Ok(string::reject_contains(value, s)),
+        Filter::IContains(s) => Ok(string::icontains(value, s)),
         _ => Err((value, filter)),
     }
 }

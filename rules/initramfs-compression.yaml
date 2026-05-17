@@ -1,0 +1,44 @@
+rules:
+  - id: initramfs-compression
+    title: Non-optimal initramfs compression
+
+    only_if:
+      require_files:
+        - /etc/initramfs-tools/initramfs.conf
+
+    triggers:
+      - name: conf_content
+        file:
+          path: /etc/initramfs-tools/initramfs.conf
+
+    values:
+      conf_lines: "$conf_content | lines"
+      zstd_count: "$conf_lines | starts_with('COMPRESS=zstd') | count"
+      lz4_count:  "$conf_lines | starts_with('COMPRESS=lz4') | count"
+
+    conditions:
+      - type: all
+        severity: Info
+        conditions:
+          - type: numeric_threshold
+            value: "$zstd_count"
+            operator: eq
+            threshold: "0"
+            severity: Info
+          - type: numeric_threshold
+            value: "$lz4_count"
+            operator: eq
+            threshold: "0"
+            severity: Info
+
+    outcome:
+      finding_id: initramfs-compression-suboptimal
+      title: "initramfs compression is not set to zstd or lz4"
+      description: >
+        The initramfs-tools configuration does not use an optimal compression
+        algorithm. Switching to zstd reduces initramfs size and speeds up boot.
+      remediation:
+        description: "Set COMPRESS=zstd in initramfs.conf and regenerate."
+        commands:
+          - "sudo sed -i 's/^COMPRESS=.*/COMPRESS=zstd/' /etc/initramfs-tools/initramfs.conf"
+          - "sudo update-initramfs -u -k all"

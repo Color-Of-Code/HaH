@@ -1,0 +1,30 @@
+rules:
+  - id: apt-key
+    title: Deprecated apt-key signing keys
+
+    triggers:
+      - name: gpg_size
+        probe:
+          type: file_size
+          path: /etc/apt/trusted.gpg
+
+    conditions:
+      - type: numeric_threshold
+        value: "$gpg_size"
+        operator: gt
+        threshold: "0"
+        severity: Warning
+
+    outcome:
+      finding_id: apt-key-legacy-gpg
+      title: "Legacy /etc/apt/trusted.gpg keyring is in use"
+      description: >
+        The file /etc/apt/trusted.gpg is non-empty. Keys managed here were added
+        with the deprecated apt-key command. They should be migrated to named
+        keyring files under /usr/share/keyrings/ and referenced via the
+        signed-by= option in source entries.
+      remediation:
+        description: "Export each key to a dedicated keyring file."
+        commands:
+          - "apt-key list"
+          - "# For each key: sudo gpg --no-default-keyring --keyring /usr/share/keyrings/NAME.gpg --import /tmp/key.asc"

@@ -8,12 +8,6 @@ use hah_core::{
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-fn is_package_installed(runner: &dyn CommandRunner, name: &str) -> bool {
-    runner
-        .run("dpkg-query", &["-W", "-f=${Status}", name])
-        .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).contains("install ok installed"))
-}
-
 fn is_service_active(runner: &dyn CommandRunner, name: &str) -> bool {
     runner
         .run("systemctl", &["is-active", "--quiet", name])
@@ -79,58 +73,6 @@ impl Check for NtpConflictCheck {
                     "sudo systemctl disable --now systemd-timesyncd".into(),
                     "# Then enable only one: sudo systemctl enable --now chrony".into(),
                 ],
-            }),
-        })
-    }
-}
-
-// ── LegacyDhcpClientCheck ─────────────────────────────────────────────────────
-/// Detects the legacy isc-dhcp-client (dhclient) package on systems where
-/// NetworkManager or systemd-networkd already handles DHCP.
-pub struct LegacyDhcpClientCheck;
-
-impl Check for LegacyDhcpClientCheck {
-    fn id(&self) -> &str {
-        "legacy-dhcp-client"
-    }
-
-    fn title(&self) -> &str {
-        "Legacy ISC DHCP client (dhclient)"
-    }
-
-    fn run(&self, ctx: &Context) -> CheckResult {
-        if !ctx.distro.is_debian_family() {
-            return CheckResult::default();
-        }
-        if !is_package_installed(ctx.runner.as_ref(), "isc-dhcp-client") {
-            return CheckResult::default();
-        }
-
-        let nm = is_package_installed(ctx.runner.as_ref(), "network-manager");
-        let networkd = is_service_active(ctx.runner.as_ref(), "systemd-networkd");
-
-        if !nm && !networkd {
-            return CheckResult::default();
-        }
-
-        let manager = match (nm, networkd) {
-            (true, true) => "NetworkManager and systemd-networkd",
-            (true, false) => "NetworkManager",
-            _ => "systemd-networkd",
-        };
-
-        CheckResult::default().with_finding(Finding {
-            id: "legacy-dhcp-client".into(),
-            title: "Legacy isc-dhcp-client installed alongside a modern network manager".into(),
-            description: format!(
-                "The `isc-dhcp-client` (dhclient) package is installed, but {manager} is \
-                 already managing DHCP. The legacy client is redundant, unmaintained \
-                 upstream, and can be safely removed."
-            ),
-            severity: Severity::Info,
-            remediation: Some(Remediation {
-                description: "Remove the legacy ISC DHCP client.".into(),
-                commands: vec!["sudo apt remove --purge isc-dhcp-client".into()],
             }),
         })
     }
@@ -332,14 +274,6 @@ mod tests {
         }
     }
 
-    fn ok_output(stdout: &str) -> CommandOutput {
-        CommandOutput {
-            stdout: stdout.as_bytes().to_vec(),
-            stderr: vec![],
-            success: true,
-        }
-    }
-
     fn success_output() -> CommandOutput {
         CommandOutput {
             stdout: vec![],
@@ -368,45 +302,7 @@ mod tests {
         }
     }
 
-    fn debian_ctx(runner: Arc<dyn CommandRunner>) -> Context {
-        make_ctx(runner, "debian")
-    }
-
-    fn non_debian_ctx() -> Context {
-        make_ctx(Arc::new(MockRunner::new()), "arch")
-    }
-
     // ── helpers ───────────────────────────────────────────────────────────────
-
-    #[test]
-    fn is_package_installed_returns_true_when_status_matches() {
-        let mut runner = MockRunner::new();
-        runner
-            .expect_run()
-            .returning(|_, _| Ok(ok_output("install ok installed")));
-        assert!(is_package_installed(&runner, "bash"));
-    }
-
-    #[test]
-    fn is_package_installed_returns_false_when_not_installed() {
-        let mut runner = MockRunner::new();
-        runner
-            .expect_run()
-            .returning(|_, _| Ok(ok_output("deinstall ok config-files")));
-        assert!(!is_package_installed(&runner, "bash"));
-    }
-
-    #[test]
-    fn is_package_installed_returns_false_on_runner_error() {
-        let mut runner = MockRunner::new();
-        runner.expect_run().returning(|_, _| {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "not found",
-            ))
-        });
-        assert!(!is_package_installed(&runner, "bash"));
-    }
 
     #[test]
     fn is_service_active_returns_true_on_success_exit() {
@@ -509,123 +405,6 @@ mod tests {
         assert_eq!(
             NtpConflictCheck
                 .run(&make_ctx(Arc::new(runner), "any"))
-                .findings
-                .len(),
-            1
-        );
-    }
-
-    // ── LegacyDhcpClientCheck ─────────────────────────────────────────────────
-
-    #[test]
-    fn legacy_dhcp_check_id_and_title() {
-        assert_eq!(LegacyDhcpClientCheck.id(), "legacy-dhcp-client");
-        assert!(!LegacyDhcpClientCheck.title().is_empty());
-    }
-
-    #[test]
-    fn legacy_dhcp_skips_non_debian() {
-        assert!(
-            LegacyDhcpClientCheck
-                .run(&non_debian_ctx())
-                .findings
-                .is_empty()
-        );
-    }
-
-    #[test]
-    fn legacy_dhcp_not_installed_returns_empty() {
-        let mut runner = MockRunner::new();
-        runner
-            .expect_run()
-            .returning(|_, _| Ok(ok_output("unknown ok not-installed")));
-        assert!(
-            LegacyDhcpClientCheck
-                .run(&debian_ctx(Arc::new(runner)))
-                .findings
-                .is_empty()
-        );
-    }
-
-    #[test]
-    fn legacy_dhcp_installed_no_modern_manager_returns_empty() {
-        let mut runner = MockRunner::new();
-        let call = std::sync::atomic::AtomicUsize::new(0);
-        runner.expect_run().returning(move |_, _| {
-            let n = call.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            if n == 0 {
-                Ok(ok_output("install ok installed")) // isc-dhcp-client installed
-            } else if n == 1 {
-                Ok(ok_output("unknown ok not-installed")) // network-manager not installed
-            } else {
-                Ok(failure_output()) // systemd-networkd not active
-            }
-        });
-        assert!(
-            LegacyDhcpClientCheck
-                .run(&debian_ctx(Arc::new(runner)))
-                .findings
-                .is_empty()
-        );
-    }
-
-    #[test]
-    fn legacy_dhcp_installed_with_nm_flagged() {
-        let mut runner = MockRunner::new();
-        let call = std::sync::atomic::AtomicUsize::new(0);
-        runner.expect_run().returning(move |_, _| {
-            let n = call.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            if n == 0 {
-                Ok(ok_output("install ok installed")) // isc-dhcp-client
-            } else if n == 1 {
-                Ok(ok_output("install ok installed")) // network-manager
-            } else {
-                Ok(failure_output()) // systemd-networkd inactive
-            }
-        });
-        let result = LegacyDhcpClientCheck.run(&debian_ctx(Arc::new(runner)));
-        assert_eq!(result.findings.len(), 1);
-        assert_eq!(result.findings[0].severity, Severity::Info);
-    }
-
-    #[test]
-    fn legacy_dhcp_installed_with_networkd_flagged() {
-        let mut runner = MockRunner::new();
-        let call = std::sync::atomic::AtomicUsize::new(0);
-        runner.expect_run().returning(move |_, _| {
-            let n = call.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            if n == 0 {
-                Ok(ok_output("install ok installed")) // isc-dhcp-client
-            } else if n == 1 {
-                Ok(ok_output("unknown ok not-installed")) // network-manager absent
-            } else {
-                Ok(success_output()) // systemd-networkd active
-            }
-        });
-        assert_eq!(
-            LegacyDhcpClientCheck
-                .run(&debian_ctx(Arc::new(runner)))
-                .findings
-                .len(),
-            1
-        );
-    }
-
-    #[test]
-    fn legacy_dhcp_installed_with_both_managers_flagged() {
-        let mut runner = MockRunner::new();
-        let call = std::sync::atomic::AtomicUsize::new(0);
-        runner.expect_run().returning(move |_, _| {
-            let n = call.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            if n == 0 || n == 1 {
-                Ok(ok_output("install ok installed")) // dhcp-client + nm installed
-            } else {
-                Ok(success_output()) // networkd active too
-            }
-        });
-        assert_eq!(
-            LegacyDhcpClientCheck
-                .run(&debian_ctx(Arc::new(runner)))
                 .findings
                 .len(),
             1

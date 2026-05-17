@@ -1,0 +1,40 @@
+rules:
+  - id: dkms-status
+    title: DKMS module build status
+
+    only_if:
+      require_commands:
+        - dkms
+
+    triggers:
+      - name: dkms_output
+        command:
+          program: dkms
+          args: ["status"]
+
+    values:
+      broken_modules:      "$dkms_output | lines | icontains('broken')"
+      uninstalled_modules: "$dkms_output | lines | icontains('not installed')"
+
+    conditions:
+      - type: any
+        severity: Warning
+        conditions:
+          - type: non_empty
+            value: "$broken_modules"
+            severity: Warning
+          - type: non_empty
+            value: "$uninstalled_modules"
+            severity: Warning
+
+    outcome:
+      finding_id: dkms-broken
+      title: "DKMS reports module build problems"
+      description: >
+        dkms status reports broken or not-installed modules.
+        Broken: {broken_modules}. Not installed: {uninstalled_modules}.
+        These modules may not work with the current kernel.
+      remediation:
+        description: "Attempt DKMS rebuild."
+        commands:
+          - "sudo dkms autoinstall"

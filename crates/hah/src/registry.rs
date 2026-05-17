@@ -1,10 +1,8 @@
 use hah_checks::{
-    apt::{AptKeyCheck, DpkgStateCheck, LegacySourcesFormatCheck, UserDefinedPackageCheck},
-    boot::{DkmsStatusCheck, InitramfsCheck, InitramfsCompressionCheck},
+    apt::{LegacySourcesFormatCheck, UserDefinedPackageCheck},
+    boot::InitramfsCheck,
     drift::OldCrashDumpsCheck,
-    network::{
-        LegacyDhcpClientCheck, LegacyNetworkInterfacesCheck, NtpConflictCheck, ResolvedConfigCheck,
-    },
+    network::{LegacyNetworkInterfacesCheck, NtpConflictCheck, ResolvedConfigCheck},
     snap::{SnapAptDuplicateCheck, SnapHealthCheck},
 };
 use hah_core::{check::Check, config::Config};
@@ -37,17 +35,12 @@ pub(crate) fn all_checks(config: &Config) -> Vec<Box<dyn Check>> {
     // Compiled checks for logic too complex for the declarative DSL.
     let mut checks: Vec<Box<dyn Check>> = vec![
         Box::new(InitramfsCheck),
-        Box::new(InitramfsCompressionCheck),
-        Box::new(DkmsStatusCheck),
-        Box::new(AptKeyCheck),
         Box::new(LegacySourcesFormatCheck),
-        Box::new(DpkgStateCheck),
         Box::new(UserDefinedPackageCheck),
         Box::new(SnapHealthCheck),
         Box::new(SnapAptDuplicateCheck),
         Box::new(OldCrashDumpsCheck),
         Box::new(NtpConflictCheck),
-        Box::new(LegacyDhcpClientCheck),
         Box::new(LegacyNetworkInterfacesCheck),
         Box::new(ResolvedConfigCheck),
     ];

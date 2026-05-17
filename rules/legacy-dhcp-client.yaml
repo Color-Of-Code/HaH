@@ -1,0 +1,52 @@
+rules:
+  - id: legacy-dhcp-client
+    title: Legacy ISC DHCP client (dhclient)
+
+    only_if:
+      distro_family: debian
+
+    triggers:
+      - name: dhclient_installed
+        probe:
+          type: package_installed
+          name: isc-dhcp-client
+      - name: nm_installed
+        probe:
+          type: package_installed
+          name: network-manager
+      - name: networkd_active
+        probe:
+          type: service_active
+          name: systemd-networkd
+
+    conditions:
+      - type: all
+        severity: Info
+        conditions:
+          - type: equals
+            value: "$dhclient_installed"
+            expected: true
+            severity: Info
+          - type: any
+            severity: Info
+            conditions:
+              - type: equals
+                value: "$nm_installed"
+                expected: true
+                severity: Info
+              - type: equals
+                value: "$networkd_active"
+                expected: true
+                severity: Info
+
+    outcome:
+      finding_id: legacy-dhcp-client
+      title: "Legacy isc-dhcp-client installed alongside a modern network manager"
+      description: >
+        The isc-dhcp-client (dhclient) package is installed but a modern network
+        manager is already handling DHCP. The legacy client is redundant,
+        unmaintained upstream, and can be safely removed.
+      remediation:
+        description: "Remove the legacy ISC DHCP client."
+        commands:
+          - "sudo apt remove --purge isc-dhcp-client"

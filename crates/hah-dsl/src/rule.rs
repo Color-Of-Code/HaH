@@ -140,6 +140,9 @@ pub struct RuleGuard {
     /// Commands that must exist on `$PATH` for this rule to run.
     #[serde(default)]
     pub require_commands: Vec<String>,
+    /// Files that must exist for this rule to run.
+    #[serde(default)]
+    pub require_files: Vec<String>,
 }
 
 /// References to named blocks defined in the `blocks` section.
@@ -162,6 +165,9 @@ pub struct RuleTrigger {
     pub name: String,
     /// Shell command to run; the raw stdout is the initial value.
     pub command: Option<CommandSpec>,
+    /// Read a file from the filesystem; the file content is the initial value.
+    /// Returns `Null` if the file does not exist (rule continues without error).
+    pub file: Option<FileSpec>,
     /// Built-in probe (package/service state).
     pub probe: Option<ProbeSpec>,
     /// Rust-backed capability (complex system analysis).
@@ -170,6 +176,12 @@ pub struct RuleTrigger {
     /// Use `$stdout` as the source variable.
     #[serde(default)]
     pub transform: Option<String>,
+}
+
+/// Specification for reading a file as a trigger.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct FileSpec {
+    pub path: String,
 }
 
 /// Specification for a shell command trigger.
@@ -184,8 +196,17 @@ pub struct CommandSpec {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ProbeSpec {
-    PackageInstalled { name: String },
-    ServiceActive { name: String },
+    PackageInstalled {
+        name: String,
+    },
+    ServiceActive {
+        name: String,
+    },
+    /// Returns the file size in bytes as an `Int`, or `Null` if the file
+    /// does not exist.
+    FileSize {
+        path: String,
+    },
 }
 
 /// Rust-backed capability trigger (complex analysis delegated to Rust).
@@ -421,6 +442,11 @@ impl RuleBasedCheck {
                 return false;
             }
         }
+        for file_path in &guard.require_files {
+            if !std::path::Path::new(file_path).exists() {
+                return false;
+            }
+        }
         true
     }
 }
@@ -455,6 +481,10 @@ impl RuleBasedCheck {
                 .run(&spec.program, &args)
                 .map_err(|e| anyhow!("command '{}': {e}", spec.program))?;
             RuleValue::Str(String::from_utf8_lossy(&out.stdout).into_owned())
+        } else if let Some(spec) = &trigger.file {
+            // Return Null (not an error) when the file does not exist so that
+            // `require_files` guards and `default('')` pipelines can handle it.
+            std::fs::read_to_string(&spec.path).map_or(RuleValue::Null, RuleValue::Str)
         } else if let Some(spec) = &trigger.probe {
             run_probe(spec, ctx)
         } else if let Some(spec) = &trigger.capability {
@@ -508,6 +538,8 @@ fn run_probe(spec: &ProbeSpec, ctx: &Context) -> RuleValue {
                 .run("systemctl", &["is-active", "--quiet", name.as_str()])
                 .is_ok_and(|o| o.success),
         ),
+        ProbeSpec::FileSize { path } => std::fs::metadata(path)
+            .map_or(RuleValue::Null, |meta| RuleValue::Int(meta.len() as i64)),
     }
 }
 

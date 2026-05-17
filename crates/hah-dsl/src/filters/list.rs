@@ -24,6 +24,17 @@ pub fn first(value: RuleValue) -> Result<RuleValue> {
     }
 }
 
+pub fn last(value: RuleValue) -> Result<RuleValue> {
+    match value {
+        RuleValue::List(mut v) => Ok(if v.is_empty() {
+            RuleValue::Null
+        } else {
+            v.pop().unwrap_or(RuleValue::Null)
+        }),
+        other => Err(anyhow!("last: expected a list, got {:?}", other)),
+    }
+}
+
 pub fn skip(value: RuleValue, n: usize) -> Result<RuleValue> {
     match value {
         RuleValue::List(mut v) => {
@@ -198,5 +209,20 @@ mod tests {
     #[test]
     fn join_err_on_non_list_non_str() {
         assert!(join(RuleValue::Int(1), ",").is_err());
+    }
+
+    #[test]
+    fn last_returns_last_element() {
+        assert_eq!(last(list(&["a", "b", "c"])).unwrap(), sv("c"));
+    }
+
+    #[test]
+    fn last_empty_list_returns_null() {
+        assert_eq!(last(RuleValue::List(vec![])).unwrap(), RuleValue::Null);
+    }
+
+    #[test]
+    fn last_err_on_non_list() {
+        assert!(last(sv("x")).is_err());
     }
 }

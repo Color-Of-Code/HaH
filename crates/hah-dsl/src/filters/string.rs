@@ -121,6 +121,27 @@ pub fn reject_contains(value: RuleValue, substring: &str) -> Result<RuleValue> {
     }
 }
 
+/// Case-insensitive `contains`.
+///
+/// On a `List`, keeps only items whose string representation contains the
+/// substring (case-insensitively), returning the filtered list.
+/// On a `Str`, returns `Bool(true/false)`.
+pub fn icontains(value: RuleValue, substring: &str) -> Result<RuleValue> {
+    let lower_sub = substring.to_lowercase();
+    match value {
+        RuleValue::List(v) => Ok(RuleValue::List(
+            v.into_iter()
+                .filter(|item| match item {
+                    RuleValue::Str(s) => s.to_lowercase().contains(&lower_sub),
+                    _ => false,
+                })
+                .collect(),
+        )),
+        RuleValue::Str(s) => Ok(RuleValue::Bool(s.to_lowercase().contains(&lower_sub))),
+        _ => Ok(RuleValue::Bool(false)),
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -264,5 +285,42 @@ mod tests {
     #[test]
     fn reject_contains_err_on_non_list() {
         assert!(reject_contains(sv("x"), "x").is_err());
+    }
+
+    #[test]
+    fn icontains_list_case_insensitive() {
+        let input = list(&["Broken module", "ok", "NOT INSTALLED"]);
+        let result = icontains(input, "broken").unwrap();
+        assert_eq!(result, list(&["Broken module"]));
+    }
+
+    #[test]
+    fn icontains_list_no_match() {
+        let result = icontains(list(&["ok", "installed"]), "broken").unwrap();
+        assert_eq!(result, list(&[]));
+    }
+
+    #[test]
+    fn icontains_str_true() {
+        assert_eq!(
+            icontains(sv("BROKEN module"), "broken").unwrap(),
+            RuleValue::Bool(true)
+        );
+    }
+
+    #[test]
+    fn icontains_str_false() {
+        assert_eq!(
+            icontains(sv("ok"), "broken").unwrap(),
+            RuleValue::Bool(false)
+        );
+    }
+
+    #[test]
+    fn icontains_non_str_returns_false() {
+        assert_eq!(
+            icontains(RuleValue::Int(1), "x").unwrap(),
+            RuleValue::Bool(false)
+        );
     }
 }

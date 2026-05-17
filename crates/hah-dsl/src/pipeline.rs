@@ -114,6 +114,8 @@ pub enum Filter {
     Join(String),
     BytesToMb,
     Default(String),
+    Last,
+    IContains(String),
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────

@@ -79,6 +79,7 @@ fn zero_arg_filter(name: &str) -> Option<Filter> {
         "lines" => Some(Filter::Lines),
         "non_empty" => Some(Filter::NonEmpty),
         "first" => Some(Filter::First),
+        "last" => Some(Filter::Last),
         "number" => Some(Filter::Number),
         "count" => Some(Filter::Count),
         "sort" => Some(Filter::Sort),
@@ -103,22 +104,24 @@ fn int_arg_filter(name: &str, args: &[RuleValue]) -> Result<Option<Filter>> {
     }
 }
 
+fn require_str_arg<'a>(name: &str, args: &'a [RuleValue]) -> Result<&'a str> {
+    args.first()
+        .and_then(RuleValue::as_str)
+        .ok_or_else(|| anyhow!("{} requires a string argument", name))
+}
+
 fn str_arg_filter(name: &str, args: &[RuleValue]) -> Result<Option<Filter>> {
-    let s = || -> Result<String> {
-        args.first()
-            .and_then(RuleValue::as_str)
-            .map(str::to_string)
-            .ok_or_else(|| anyhow!("{} requires a string argument", name))
+    let ctor: fn(String) -> Filter = match name {
+        "prefix_strip" => Filter::PrefixStrip,
+        "starts_with" => Filter::StartsWith,
+        "contains" => Filter::Contains,
+        "reject_contains" => Filter::RejectContains,
+        "icontains" => Filter::IContains,
+        "join" => Filter::Join,
+        "default" => Filter::Default,
+        _ => return Ok(None),
     };
-    match name {
-        "prefix_strip" => Ok(Some(Filter::PrefixStrip(s()?))),
-        "starts_with" => Ok(Some(Filter::StartsWith(s()?))),
-        "contains" => Ok(Some(Filter::Contains(s()?))),
-        "reject_contains" => Ok(Some(Filter::RejectContains(s()?))),
-        "join" => Ok(Some(Filter::Join(s()?))),
-        "default" => Ok(Some(Filter::Default(s()?))),
-        _ => Ok(None),
-    }
+    Ok(Some(ctor(require_str_arg(name, args)?.to_string())))
 }
 
 #[cfg(test)]

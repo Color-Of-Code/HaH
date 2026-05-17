@@ -5,101 +5,6 @@ use hah_core::{
     model::{CheckResult, Finding, Remediation, Severity},
 };
 
-// ── DpkgStateCheck ───────────────────────────────────────────────────────────
-
-pub struct DpkgStateCheck;
-
-impl Check for DpkgStateCheck {
-    fn id(&self) -> &str {
-        "dpkg-state"
-    }
-
-    fn title(&self) -> &str {
-        "Broken dpkg package states"
-    }
-
-    fn run(&self, ctx: &Context) -> CheckResult {
-        if !ctx.distro.is_debian_family() {
-            return CheckResult::default();
-        }
-
-        let out = match ctx.runner.run("dpkg", &["--audit"]) {
-            Ok(o) => o,
-            Err(e) => return CheckResult::default().with_error(e.to_string()),
-        };
-
-        let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-        if stdout.trim().is_empty() {
-            return CheckResult::default();
-        }
-
-        CheckResult::default().with_finding(Finding {
-            id: "dpkg-audit".into(),
-            title: "dpkg audit reports package state problems".into(),
-            description: stdout.trim().to_string(),
-            severity: Severity::Critical,
-            remediation: Some(Remediation {
-                description: "Attempt to fix broken packages.".into(),
-                commands: vec![
-                    "sudo dpkg --configure -a".into(),
-                    "sudo apt-get install -f".into(),
-                ],
-            }),
-        })
-    }
-}
-
-// ── AptKeyCheck ──────────────────────────────────────────────────────────────
-
-pub struct AptKeyCheck;
-
-/// Return a finding if `path` exists and is non-empty (legacy keyring).
-pub(crate) fn apt_key_finding(path: &Path) -> Option<Finding> {
-    if path.exists()
-        && let Ok(meta) = path.metadata()
-        && meta.len() > 0
-    {
-        Some(Finding {
-            id: "apt-key-legacy-gpg".into(),
-            title: "Legacy /etc/apt/trusted.gpg keyring is in use".into(),
-            description: "The file /etc/apt/trusted.gpg is non-empty. Keys managed here \
-                         were added with the deprecated `apt-key` command. They should be \
-                         migrated to named keyring files under /usr/share/keyrings/ and \
-                         referenced via the signed-by= option in source entries."
-                .into(),
-            severity: Severity::Warning,
-            remediation: Some(Remediation {
-                description: "Export each key to a dedicated keyring file.".into(),
-                commands: vec![
-                    "apt-key list".into(),
-                    "# For each key: sudo gpg --no-default-keyring \
-                             --keyring /usr/share/keyrings/NAME.gpg \
-                             --import /tmp/key.asc"
-                        .into(),
-                ],
-            }),
-        })
-    } else {
-        None
-    }
-}
-
-impl Check for AptKeyCheck {
-    fn id(&self) -> &str {
-        "apt-key"
-    }
-
-    fn title(&self) -> &str {
-        "Deprecated apt-key signing keys"
-    }
-
-    fn run(&self, _ctx: &Context) -> CheckResult {
-        apt_key_finding(Path::new("/etc/apt/trusted.gpg")).map_or_else(CheckResult::default, |f| {
-            CheckResult::default().with_finding(f)
-        })
-    }
-}
-
 // ── LegacySourcesFormatCheck ─────────────────────────────────────────────────
 
 pub struct LegacySourcesFormatCheck;
@@ -273,36 +178,6 @@ mod tests {
         make_ctx(runner, Config::default(), "debian")
     }
 
-    fn non_debian_ctx() -> Context {
-        make_ctx(Arc::new(MockRunner::new()), Config::default(), "arch")
-    }
-
-    // ── DpkgStateCheck ───────────────────────────────────────────────────────
-
-    #[test]
-    fn dpkg_state_skips_non_debian() {
-        assert!(DpkgStateCheck.run(&non_debian_ctx()).findings.is_empty());
-    }
-
-    #[test]
-    fn dpkg_state_clean() {
-        let mut runner = MockRunner::new();
-        runner.expect_run().returning(|_, _| Ok(ok_output("")));
-        let result = DpkgStateCheck.run(&debian_ctx(Arc::new(runner)));
-        assert!(result.findings.is_empty());
-    }
-
-    #[test]
-    fn dpkg_state_broken_packages() {
-        let mut runner = MockRunner::new();
-        runner
-            .expect_run()
-            .returning(|_, _| Ok(ok_output("broken package state info\n")));
-        let result = DpkgStateCheck.run(&debian_ctx(Arc::new(runner)));
-        assert_eq!(result.findings.len(), 1);
-        assert_eq!(result.findings[0].severity, Severity::Critical);
-    }
-
     // ── UserDefinedPackageCheck ──────────────────────────────────────────────
 
     #[test]
@@ -356,49 +231,6 @@ mod tests {
         }];
         let ctx = make_ctx(Arc::new(runner), config, "debian");
         assert!(UserDefinedPackageCheck.run(&ctx).findings.is_empty());
-    }
-
-    // ── apt_key_finding ───────────────────────────────────────────────────────
-
-    #[test]
-    fn apt_key_finding_returns_none_when_file_absent() {
-        assert!(apt_key_finding(std::path::Path::new("/nonexistent/trusted.gpg")).is_none());
-    }
-
-    #[test]
-    fn apt_key_finding_returns_none_when_file_empty() {
-        let path = std::env::temp_dir().join(format!("hah_gpg_empty_{}.gpg", std::process::id()));
-        std::fs::write(&path, b"").unwrap();
-        let result = apt_key_finding(&path);
-        let _ = std::fs::remove_file(&path);
-        assert!(result.is_none());
-    }
-
-    #[test]
-    fn apt_key_finding_returns_warning_when_file_nonempty() {
-        let path =
-            std::env::temp_dir().join(format!("hah_gpg_nonempty_{}.gpg", std::process::id()));
-        std::fs::write(&path, b"fake-gpg-data").unwrap();
-        let finding = apt_key_finding(&path);
-        let _ = std::fs::remove_file(&path);
-        let f = finding.expect("expected a finding for non-empty gpg file");
-        assert_eq!(f.severity, Severity::Warning);
-        assert_eq!(f.id, "apt-key-legacy-gpg");
-    }
-
-    #[test]
-    fn apt_key_check_id_and_title() {
-        assert_eq!(AptKeyCheck.id(), "apt-key");
-        assert!(!AptKeyCheck.title().is_empty());
-    }
-
-    #[test]
-    fn apt_key_check_runs_without_panic_on_real_system() {
-        let ctx = make_ctx(Arc::new(MockRunner::new()), Config::default(), "debian");
-        let result = AptKeyCheck.run(&ctx);
-        for f in &result.findings {
-            assert_eq!(f.severity, Severity::Warning);
-        }
     }
 
     // ── collect_legacy_source_files ───────────────────────────────────────────

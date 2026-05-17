@@ -1,0 +1,29 @@
+rules:
+  - id: dpkg-state
+    title: Broken dpkg package states
+
+    only_if:
+      distro_family: debian
+      require_commands:
+        - dpkg
+
+    triggers:
+      - name: audit_output
+        command:
+          program: dpkg
+          args: ["--audit"]
+
+    conditions:
+      - type: non_empty
+        value: "$audit_output | trim"
+        severity: Critical
+
+    outcome:
+      finding_id: dpkg-audit
+      title: "dpkg audit reports package state problems"
+      description: "{audit_output}"
+      remediation:
+        description: "Attempt to fix broken packages."
+        commands:
+          - "sudo dpkg --configure -a"
+          - "sudo apt-get install -f"
