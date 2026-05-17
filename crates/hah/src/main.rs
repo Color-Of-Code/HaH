@@ -57,7 +57,47 @@ pub(crate) fn run_with_config(cli: Cli, config: Config, distro: DistroInfo) -> b
             }
             false
         }
+
+        Command::Validate { paths } => run_lint(&paths, &config),
     }
+}
+
+fn run_lint(paths: &[std::path::PathBuf], config: &Config) -> bool {
+    let dirs: Vec<std::path::PathBuf> = if paths.is_empty() {
+        registry::rule_search_dirs(config)
+    } else {
+        paths.to_vec()
+    };
+
+    let mut has_errors = false;
+    for path in &dirs {
+        let files = collect_yaml_files(path);
+        for file in files {
+            let errors = hah_dsl::validate_rule_file(&file);
+            for err in errors {
+                eprintln!("{}: {err}", file.display());
+                has_errors = true;
+            }
+        }
+    }
+    if !has_errors {
+        println!("All rule files are valid.");
+    }
+    has_errors
+}
+
+fn collect_yaml_files(path: &std::path::Path) -> Vec<std::path::PathBuf> {
+    if path.is_file() {
+        return vec![path.to_path_buf()];
+    }
+    let Ok(entries) = std::fs::read_dir(path) else {
+        return vec![];
+    };
+    entries
+        .flatten()
+        .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("yaml"))
+        .map(|e| e.path())
+        .collect()
 }
 
 /// Load config + distro from the real system, then delegate to [`run_with_config`].
@@ -180,5 +220,36 @@ mod tests {
     fn run_does_not_panic_with_real_system() {
         // Exercises the Config::load() / DistroInfo::detect() code paths.
         run(parse(&["hah", "scan", "--check", "__no_such_check__"]));
+    }
+
+    #[test]
+    fn validate_shipped_rules_returns_false() {
+        assert!(!run_with_config(
+            parse(&["hah", "validate"]),
+            Config::default(),
+            DistroInfo::default(),
+        ));
+    }
+
+    #[test]
+    fn validate_explicit_rules_dir_returns_false() {
+        assert!(!run_with_config(
+            parse(&["hah", "validate", "rules/"]),
+            Config::default(),
+            DistroInfo::default(),
+        ));
+    }
+
+    #[test]
+    fn validate_bad_file_returns_true() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("bad.yaml");
+        std::fs::write(&path, "not: [valid: {{").expect("write");
+        let result = run_with_config(
+            parse(&["hah", "validate", path.to_str().expect("utf8")]),
+            Config::default(),
+            DistroInfo::default(),
+        );
+        assert!(result);
     }
 }

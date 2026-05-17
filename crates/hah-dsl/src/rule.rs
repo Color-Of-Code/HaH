@@ -17,6 +17,7 @@ use hah_core::{
 
 use crate::{
     caps_bridge,
+    parsers::dsl::{CompareToken, ConditionExpr, parse_condition_expr},
     pipeline::{RuleValue, ValueMap, eval_expr, render_template},
 };
 
@@ -250,7 +251,7 @@ fn default_initramfs_threshold() -> u64 {
 // ── Conditions ────────────────────────────────────────────────────────────────
 
 /// A typed condition predicate.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RuleCondition {
     NumericThreshold {
@@ -292,6 +293,298 @@ pub enum RuleCondition {
         item_var: String,
         severity: Severity,
     },
+}
+
+// ── Custom Deserialize for RuleCondition ──────────────────────────────────────
+//
+// Supports three input formats (tried in order):
+// 1. Compact:  `{ info: "$x > 0" }` — severity key maps to expression string
+// 2. Typed:    `{ type: numeric_threshold, value: ..., ... }` — existing format
+// 3. Inferred: `{ value: ..., operator: ..., threshold: ..., severity: ... }` —
+//              auto-detects variant from which fields are present
+
+/// Internal typed condition (mirrors `RuleCondition` with serde tag).
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum TypedCondition {
+    NumericThreshold {
+        value: String,
+        operator: CompareOp,
+        threshold: String,
+        severity: Severity,
+    },
+    Equals {
+        value: String,
+        expected: ExpectedValue,
+        severity: Severity,
+    },
+    NonEmpty {
+        value: String,
+        severity: Severity,
+    },
+    RegexMatch {
+        value: String,
+        pattern: String,
+        severity: Severity,
+    },
+    All {
+        conditions: Vec<RuleCondition>,
+        severity: Severity,
+    },
+    Any {
+        conditions: Vec<RuleCondition>,
+        severity: Severity,
+    },
+    ForEach {
+        source: String,
+        item_var: String,
+        severity: Severity,
+    },
+}
+
+impl From<TypedCondition> for RuleCondition {
+    fn from(tc: TypedCondition) -> Self {
+        match tc {
+            TypedCondition::NumericThreshold {
+                value,
+                operator,
+                threshold,
+                severity,
+            } => Self::NumericThreshold {
+                value,
+                operator,
+                threshold,
+                severity,
+            },
+            TypedCondition::Equals {
+                value,
+                expected,
+                severity,
+            } => Self::Equals {
+                value,
+                expected,
+                severity,
+            },
+            TypedCondition::NonEmpty { value, severity } => Self::NonEmpty { value, severity },
+            TypedCondition::RegexMatch {
+                value,
+                pattern,
+                severity,
+            } => Self::RegexMatch {
+                value,
+                pattern,
+                severity,
+            },
+            TypedCondition::All {
+                conditions,
+                severity,
+            } => Self::All {
+                conditions,
+                severity,
+            },
+            TypedCondition::Any {
+                conditions,
+                severity,
+            } => Self::Any {
+                conditions,
+                severity,
+            },
+            TypedCondition::ForEach {
+                source,
+                item_var,
+                severity,
+            } => Self::ForEach {
+                source,
+                item_var,
+                severity,
+            },
+        }
+    }
+}
+
+/// Flat struct for inferred conditions (auto-detect variant from fields).
+#[derive(Deserialize)]
+struct InferredCondition {
+    severity: Severity,
+    #[serde(default)]
+    value: Option<String>,
+    #[serde(default)]
+    operator: Option<CompareOp>,
+    #[serde(default)]
+    threshold: Option<String>,
+    #[serde(default)]
+    expected: Option<ExpectedValue>,
+    #[serde(default)]
+    pattern: Option<String>,
+    #[serde(default)]
+    source: Option<String>,
+    #[serde(default)]
+    item_var: Option<String>,
+}
+
+impl InferredCondition {
+    fn into_rule_condition(self) -> std::result::Result<RuleCondition, String> {
+        if let Some(op) = self.operator {
+            let value = self.value.ok_or("operator requires 'value'")?;
+            let threshold = self.threshold.ok_or("operator requires 'threshold'")?;
+            return Ok(RuleCondition::NumericThreshold {
+                value,
+                operator: op,
+                threshold,
+                severity: self.severity,
+            });
+        }
+        if let Some(expected) = self.expected {
+            let value = self.value.ok_or("expected requires 'value'")?;
+            return Ok(RuleCondition::Equals {
+                value,
+                expected,
+                severity: self.severity,
+            });
+        }
+        if let Some(pattern) = self.pattern {
+            let value = self.value.ok_or("pattern requires 'value'")?;
+            return Ok(RuleCondition::RegexMatch {
+                value,
+                pattern,
+                severity: self.severity,
+            });
+        }
+        if let Some(source) = self.source {
+            let item_var = self.item_var.ok_or("source requires 'item_var'")?;
+            return Ok(RuleCondition::ForEach {
+                source,
+                item_var,
+                severity: self.severity,
+            });
+        }
+        if let Some(value) = self.value {
+            return Ok(RuleCondition::NonEmpty {
+                value,
+                severity: self.severity,
+            });
+        }
+        Err("cannot infer condition type: no recognisable fields".into())
+    }
+}
+
+/// Compact condition: `{ info: "$x > 0" }` / `{ warning: "$list" }` etc.
+#[derive(Deserialize)]
+struct CompactCondition {
+    #[serde(default)]
+    info: Option<String>,
+    #[serde(default)]
+    warning: Option<String>,
+    #[serde(default)]
+    critical: Option<String>,
+}
+
+impl CompactCondition {
+    fn into_rule_condition(self) -> std::result::Result<RuleCondition, String> {
+        let (severity, expr) = if let Some(e) = self.info {
+            (Severity::Info, e)
+        } else if let Some(e) = self.warning {
+            (Severity::Warning, e)
+        } else if let Some(e) = self.critical {
+            (Severity::Critical, e)
+        } else {
+            return Err("compact condition requires info, warning, or critical key".into());
+        };
+        build_from_compact_expr(severity, &expr)
+    }
+}
+
+fn compare_token_to_op(tok: CompareToken) -> CompareOp {
+    match tok {
+        CompareToken::Gte => CompareOp::Gte,
+        CompareToken::Lte => CompareOp::Lte,
+        CompareToken::Neq => CompareOp::Neq,
+        CompareToken::Eq => CompareOp::Eq,
+        CompareToken::Gt => CompareOp::Gt,
+        CompareToken::Lt => CompareOp::Lt,
+    }
+}
+
+fn build_from_compact_expr(
+    severity: Severity,
+    expr: &str,
+) -> std::result::Result<RuleCondition, String> {
+    match parse_condition_expr(expr) {
+        ConditionExpr::Compare { lhs, op, rhs } => {
+            // Check for bool equality: `$x == true`, `$x != false`, etc.
+            if matches!(op, CompareToken::Eq | CompareToken::Neq)
+                && let Some(cond) = try_bool_equals(&lhs, op, &rhs, &severity)
+            {
+                return Ok(cond);
+            }
+            Ok(RuleCondition::NumericThreshold {
+                value: lhs,
+                operator: compare_token_to_op(op),
+                threshold: rhs,
+                severity,
+            })
+        }
+        ConditionExpr::Bare(pipeline) => Ok(RuleCondition::NonEmpty {
+            value: pipeline,
+            severity,
+        }),
+    }
+}
+
+fn try_bool_equals(
+    lhs: &str,
+    op: CompareToken,
+    rhs: &str,
+    severity: &Severity,
+) -> Option<RuleCondition> {
+    let rhs_trimmed = rhs.trim();
+    let bool_val = match rhs_trimmed {
+        "true" => true,
+        "false" => false,
+        _ => return None,
+    };
+    // `!= true` → expected false; `!= false` → expected true
+    let expected = if op == CompareToken::Eq {
+        bool_val
+    } else {
+        !bool_val
+    };
+    Some(RuleCondition::Equals {
+        value: lhs.to_string(),
+        expected: ExpectedValue::Bool(expected),
+        severity: severity.clone(),
+    })
+}
+
+impl<'de> Deserialize<'de> for RuleCondition {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+        use serde_value::{DeserializerError, ValueDeserializer};
+
+        type VD = ValueDeserializer<DeserializerError>;
+
+        // Use serde_value to buffer the input so we can try multiple formats.
+        let value = serde_value::Value::deserialize(deserializer)?;
+
+        // 1. Try typed (has `type` field) — most specific, try first.
+        if let Ok(typed) = TypedCondition::deserialize(VD::new(value.clone())) {
+            return Ok(RuleCondition::from(typed));
+        }
+
+        // 2. Try compact (`{ info: "..." }` / `{ warning: "..." }` / ...).
+        if let Ok(compact) = CompactCondition::deserialize(VD::new(value.clone()))
+            && (compact.info.is_some() || compact.warning.is_some() || compact.critical.is_some())
+        {
+            return compact.into_rule_condition().map_err(D::Error::custom);
+        }
+
+        // 3. Try inferred (flat struct, no `type` field).
+        let inferred = InferredCondition::deserialize(VD::new(value)).map_err(D::Error::custom)?;
+        inferred.into_rule_condition().map_err(D::Error::custom)
+    }
 }
 
 /// Comparison operator for [`RuleCondition::NumericThreshold`].
@@ -750,7 +1043,7 @@ impl RuleBasedCheck {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use std::io;
 
@@ -1787,5 +2080,288 @@ rules:
         let ctx = Context::new(false, Config::default(), DistroInfo::default());
         let result = run_probe(&spec, &ctx);
         assert_eq!(result, RuleValue::Str("/some/target".into()));
+    }
+
+    // ── Compact condition syntax ──────────────────────────────────────────────
+
+    #[test]
+    fn compact_condition_numeric_gt() {
+        let yaml = r#"
+rules:
+  - id: t
+    title: T
+    conditions:
+      - info: "$count > 0"
+    outcome:
+      finding_id: t
+      title: T
+      description: ""
+"#;
+        let check = make_check(yaml);
+        let cond = &check.rule.conditions[0];
+        assert!(matches!(
+            cond,
+            RuleCondition::NumericThreshold {
+                severity: Severity::Info,
+                ..
+            }
+        ));
+        if let RuleCondition::NumericThreshold {
+            value,
+            operator,
+            threshold,
+            ..
+        } = cond
+        {
+            assert_eq!(value, "$count");
+            assert!(matches!(operator, CompareOp::Gt));
+            assert_eq!(threshold, "0");
+        }
+    }
+
+    #[test]
+    fn compact_condition_numeric_lte() {
+        let yaml = r#"
+rules:
+  - id: t
+    title: T
+    conditions:
+      - critical: "$free_mb <= $threshold_mb"
+    outcome:
+      finding_id: t
+      title: T
+      description: ""
+"#;
+        let check = make_check(yaml);
+        let cond = &check.rule.conditions[0];
+        if let RuleCondition::NumericThreshold {
+            value,
+            operator,
+            threshold,
+            severity,
+        } = cond
+        {
+            assert_eq!(value, "$free_mb");
+            assert!(matches!(operator, CompareOp::Lte));
+            assert_eq!(threshold, "$threshold_mb");
+            assert_eq!(*severity, Severity::Critical);
+        } else {
+            panic!("expected NumericThreshold");
+        }
+    }
+
+    #[test]
+    fn compact_condition_bool_equals() {
+        let yaml = r#"
+rules:
+  - id: t
+    title: T
+    conditions:
+      - warning: "$ntp_installed == true"
+    outcome:
+      finding_id: t
+      title: T
+      description: ""
+"#;
+        let check = make_check(yaml);
+        let cond = &check.rule.conditions[0];
+        if let RuleCondition::Equals {
+            value,
+            expected,
+            severity,
+        } = cond
+        {
+            assert_eq!(value, "$ntp_installed");
+            assert!(matches!(expected, ExpectedValue::Bool(true)));
+            assert_eq!(*severity, Severity::Warning);
+        } else {
+            panic!("expected Equals, got {cond:?}");
+        }
+    }
+
+    #[test]
+    fn compact_condition_bool_neq_true_becomes_false() {
+        let yaml = r#"
+rules:
+  - id: t
+    title: T
+    conditions:
+      - info: "$active != true"
+    outcome:
+      finding_id: t
+      title: T
+      description: ""
+"#;
+        let check = make_check(yaml);
+        let cond = &check.rule.conditions[0];
+        if let RuleCondition::Equals { expected, .. } = cond {
+            assert!(matches!(expected, ExpectedValue::Bool(false)));
+        } else {
+            panic!("expected Equals, got {cond:?}");
+        }
+    }
+
+    #[test]
+    fn compact_condition_bare_non_empty() {
+        let yaml = r#"
+rules:
+  - id: t
+    title: T
+    conditions:
+      - warning: "$items"
+    outcome:
+      finding_id: t
+      title: T
+      description: ""
+"#;
+        let check = make_check(yaml);
+        let cond = &check.rule.conditions[0];
+        if let RuleCondition::NonEmpty { value, severity } = cond {
+            assert_eq!(value, "$items");
+            assert_eq!(*severity, Severity::Warning);
+        } else {
+            panic!("expected NonEmpty, got {cond:?}");
+        }
+    }
+
+    #[test]
+    fn compact_condition_pipeline_non_empty() {
+        let yaml = r#"
+rules:
+  - id: t
+    title: T
+    conditions:
+      - critical: "$output | lines | non_empty"
+    outcome:
+      finding_id: t
+      title: T
+      description: ""
+"#;
+        let check = make_check(yaml);
+        let cond = &check.rule.conditions[0];
+        if let RuleCondition::NonEmpty { value, severity } = cond {
+            assert_eq!(value, "$output | lines | non_empty");
+            assert_eq!(*severity, Severity::Critical);
+        } else {
+            panic!("expected NonEmpty, got {cond:?}");
+        }
+    }
+
+    // ── Inferred condition (no type: field) ───────────────────────────────────
+
+    #[test]
+    fn inferred_numeric_threshold() {
+        let yaml = r#"
+rules:
+  - id: t
+    title: T
+    conditions:
+      - value: "$count"
+        operator: gt
+        threshold: "0"
+        severity: Info
+    outcome:
+      finding_id: t
+      title: T
+      description: ""
+"#;
+        let check = make_check(yaml);
+        let cond = &check.rule.conditions[0];
+        assert!(matches!(cond, RuleCondition::NumericThreshold { .. }));
+    }
+
+    #[test]
+    fn inferred_equals() {
+        let yaml = r#"
+rules:
+  - id: t
+    title: T
+    conditions:
+      - value: "$active"
+        expected: true
+        severity: Warning
+    outcome:
+      finding_id: t
+      title: T
+      description: ""
+"#;
+        let check = make_check(yaml);
+        let cond = &check.rule.conditions[0];
+        assert!(matches!(cond, RuleCondition::Equals { .. }));
+    }
+
+    #[test]
+    fn inferred_non_empty() {
+        let yaml = r#"
+rules:
+  - id: t
+    title: T
+    conditions:
+      - value: "$items"
+        severity: Info
+    outcome:
+      finding_id: t
+      title: T
+      description: ""
+"#;
+        let check = make_check(yaml);
+        let cond = &check.rule.conditions[0];
+        assert!(matches!(cond, RuleCondition::NonEmpty { .. }));
+    }
+
+    #[test]
+    fn inferred_regex_match() {
+        let yaml = r#"
+rules:
+  - id: t
+    title: T
+    conditions:
+      - value: "$line"
+        pattern: "^error"
+        severity: Critical
+    outcome:
+      finding_id: t
+      title: T
+      description: ""
+"#;
+        let check = make_check(yaml);
+        let cond = &check.rule.conditions[0];
+        assert!(matches!(cond, RuleCondition::RegexMatch { .. }));
+    }
+
+    // ── Typed form (backward compat) still works ──────────────────────────────
+
+    #[test]
+    fn typed_all_with_nested_compact_conditions() {
+        let yaml = r#"
+rules:
+  - id: t
+    title: T
+    conditions:
+      - type: all
+        severity: Warning
+        conditions:
+          - type: equals
+            value: "$a"
+            expected: true
+            severity: Warning
+          - info: "$b > 5"
+    outcome:
+      finding_id: t
+      title: T
+      description: ""
+"#;
+        let check = make_check(yaml);
+        let cond = &check.rule.conditions[0];
+        if let RuleCondition::All { conditions, .. } = cond {
+            assert_eq!(conditions.len(), 2);
+            assert!(matches!(conditions[0], RuleCondition::Equals { .. }));
+            assert!(matches!(
+                conditions[1],
+                RuleCondition::NumericThreshold { .. }
+            ));
+        } else {
+            panic!("expected All, got {cond:?}");
+        }
     }
 }

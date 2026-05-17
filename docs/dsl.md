@@ -193,6 +193,50 @@ values:
 
 Every condition requires a `severity` (`Info`, `Warning`, or `Critical`).
 
+### Compact syntax
+
+The most concise way to write conditions. Use a severity key (`info`, `warning`, or `critical`)
+with an expression string:
+
+```yaml
+conditions:
+  - info: "$residual_packages"            # non-empty check
+  - warning: "$count > 5"                 # numeric threshold (gt)
+  - critical: "$free_mb < 50"             # numeric threshold (lt)
+  - info: "$enabled == true"              # boolean equality
+  - warning: "$status != true"            # boolean inequality (becomes equals false)
+```
+
+Supported operators: `>`, `>=`, `<`, `<=`, `==`, `!=`. When no operator is present, the
+expression is treated as a `non_empty` check on the pipeline result.
+
+### Inferred syntax
+
+Omit the `type:` field and let HaH infer the condition type from the fields present:
+
+```yaml
+conditions:
+  - value: "$free_bytes"
+    operator: lt
+    threshold: "$threshold_bytes"
+    severity: Critical
+
+  - value: "$ntp_installed"
+    expected: true
+    severity: Warning
+
+  - value: "$packages"
+    severity: Info
+
+  - value: "$line"
+    pattern: "^COMPRESS=lz4"
+    severity: Info
+```
+
+### Typed syntax (explicit)
+
+Use `type:` for full control or when combining conditions with `all`/`any`:
+
 ```yaml
 conditions:
   - type: numeric_threshold
@@ -339,3 +383,17 @@ See [`rules/`](../rules/) for the default rule set shipped with HaH:
 | `apt-key.yaml` | `file_size` probe, `numeric_threshold` |
 | `dpkg-state.yaml` | Simple command + `non_empty` condition |
 | `legacy-dhcp-client.yaml` | Multi-probe, `all`/`any` nested conditions |
+
+---
+
+## Validating Rule Files
+
+Use `hah validate` to check rule file syntax without running any checks:
+
+```bash
+hah validate                          # validates all rule search dirs
+hah validate rules/boot-space.yaml    # validate a specific file
+hah validate my-rules/                # validate all YAML files in a directory
+```
+
+This catches YAML parse errors, unknown condition types, and duplicate rule IDs early.

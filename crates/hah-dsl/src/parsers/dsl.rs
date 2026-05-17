@@ -7,6 +7,73 @@ use winnow::token::{take_till, take_while};
 use crate::expr::Expression;
 use crate::pipeline::RuleValue;
 
+// ── Condition expression (compact syntax) ─────────────────────────────────────
+
+/// Parsed result of a compact condition expression like `"$x > 0"`.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ConditionExpr {
+    /// Comparison: `lhs_expr OP rhs_expr` (e.g. `"$count > 0"`)
+    Compare {
+        lhs: String,
+        op: CompareToken,
+        rhs: String,
+    },
+    /// Bare expression (no operator) → implies non-empty check.
+    Bare(String),
+}
+
+/// Comparison operator token parsed from a compact condition string.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompareToken {
+    Gte,
+    Lte,
+    Neq,
+    Eq,
+    Gt,
+    Lt,
+}
+
+/// Parse a compact condition expression string.
+///
+/// Splits on comparison operators (trying longest first: `>=`, `<=`, `!=`,
+/// `==`, `>`, `<`).  If no operator is found, returns [`ConditionExpr::Bare`].
+pub fn parse_condition_expr(input: &str) -> ConditionExpr {
+    // Operators ordered longest-first to avoid `>` matching inside `>=`.
+    const OPS: &[(&str, CompareToken)] = &[
+        (">=", CompareToken::Gte),
+        ("<=", CompareToken::Lte),
+        ("!=", CompareToken::Neq),
+        ("==", CompareToken::Eq),
+        (">", CompareToken::Gt),
+        ("<", CompareToken::Lt),
+    ];
+    for &(tok, op) in OPS {
+        if let Some(pos) = find_operator(input, tok) {
+            let lhs = input[..pos].trim().to_string();
+            let rhs = input[pos + tok.len()..].trim().to_string();
+            return ConditionExpr::Compare { lhs, op, rhs };
+        }
+    }
+    ConditionExpr::Bare(input.trim().to_string())
+}
+
+/// Find an operator token that is NOT inside quotes.
+fn find_operator(input: &str, op: &str) -> Option<usize> {
+    let mut in_quote: Option<char> = None;
+    let bytes = input.as_bytes();
+    for i in 0..bytes.len() {
+        let ch = bytes[i] as char;
+        match in_quote {
+            Some(q) if ch == q => in_quote = None,
+            Some(_) => {}
+            None if ch == '\'' || ch == '"' => in_quote = Some(ch),
+            None if input[i..].starts_with(op) => return Some(i),
+            None => {}
+        }
+    }
+    None
+}
+
 /// Parse a full pipeline expression.
 pub fn parse_expression(input: &mut &str) -> Result<Expression> {
     let mut exprs: Vec<Expression> =
@@ -107,4 +174,103 @@ fn parse_filter_call(input: &mut &str) -> Result<Expression> {
         name,
         args: args.unwrap_or_default(),
     })
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_condition_gt() {
+        let result = parse_condition_expr("$count > 0");
+        assert_eq!(
+            result,
+            ConditionExpr::Compare {
+                lhs: "$count".into(),
+                op: CompareToken::Gt,
+                rhs: "0".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn parse_condition_gte() {
+        let result = parse_condition_expr("$x >= 10");
+        assert_eq!(
+            result,
+            ConditionExpr::Compare {
+                lhs: "$x".into(),
+                op: CompareToken::Gte,
+                rhs: "10".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn parse_condition_lte_with_variable_rhs() {
+        let result = parse_condition_expr("$free_mb <= $threshold_mb");
+        assert_eq!(
+            result,
+            ConditionExpr::Compare {
+                lhs: "$free_mb".into(),
+                op: CompareToken::Lte,
+                rhs: "$threshold_mb".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn parse_condition_eq_bool() {
+        let result = parse_condition_expr("$active == true");
+        assert_eq!(
+            result,
+            ConditionExpr::Compare {
+                lhs: "$active".into(),
+                op: CompareToken::Eq,
+                rhs: "true".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn parse_condition_neq() {
+        let result = parse_condition_expr("$status != false");
+        assert_eq!(
+            result,
+            ConditionExpr::Compare {
+                lhs: "$status".into(),
+                op: CompareToken::Neq,
+                rhs: "false".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn parse_condition_bare_variable() {
+        let result = parse_condition_expr("$items");
+        assert_eq!(result, ConditionExpr::Bare("$items".into()));
+    }
+
+    #[test]
+    fn parse_condition_bare_pipeline() {
+        let result = parse_condition_expr("$output | lines | non_empty");
+        assert_eq!(
+            result,
+            ConditionExpr::Bare("$output | lines | non_empty".into())
+        );
+    }
+
+    #[test]
+    fn parse_condition_operator_in_quotes_not_matched() {
+        let result = parse_condition_expr("$x == '> 5'");
+        assert_eq!(
+            result,
+            ConditionExpr::Compare {
+                lhs: "$x".into(),
+                op: CompareToken::Eq,
+                rhs: "'> 5'".into(),
+            }
+        );
+    }
 }

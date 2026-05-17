@@ -11,7 +11,7 @@ const DEFAULT_RULES_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../rule
 
 /// Rule file search path: default shipped rules, system-wide, user-local, then
 /// extra paths from config.
-fn rule_search_dirs(config: &Config) -> Vec<PathBuf> {
+pub(crate) fn rule_search_dirs(config: &Config) -> Vec<PathBuf> {
     let mut dirs = vec![
         PathBuf::from(DEFAULT_RULES_DIR),
         PathBuf::from("/usr/share/hah/rules"),

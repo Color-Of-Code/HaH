@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Debug, Parser)]
@@ -26,6 +28,13 @@ pub enum Command {
 
     /// List all registered checks with their IDs
     ListChecks,
+
+    /// Validate rule file syntax and structure
+    Validate {
+        /// Files or directories to check (default: standard rule dirs)
+        #[arg(value_name = "PATH")]
+        paths: Vec<PathBuf>,
+    },
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -98,5 +107,25 @@ mod tests {
     #[test]
     fn parse_invalid_subcommand_returns_error() {
         assert!(Cli::try_parse_from(["hah", "invalid-subcommand"]).is_err());
+    }
+
+    #[test]
+    fn parse_validate_no_paths() {
+        if let Command::Validate { paths } = parse(&["hah", "validate"]).command {
+            assert!(paths.is_empty());
+        } else {
+            panic!("expected Validate");
+        }
+    }
+
+    #[test]
+    fn parse_validate_with_paths() {
+        if let Command::Validate { paths } =
+            parse(&["hah", "validate", "rules/", "/etc/hah"]).command
+        {
+            assert_eq!(paths.len(), 2);
+        } else {
+            panic!("expected Validate");
+        }
     }
 }
