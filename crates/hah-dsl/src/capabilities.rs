@@ -4,14 +4,18 @@
 //! command-based operations, or nothing for pure filesystem operations) and
 //! returns a [`RuleValue`] ready for use in a pipeline expression.
 //!
-//! | Capability              | Returns                                   |
-//! |-------------------------|-------------------------------------------|
-//! | [`journal_usage_mb`]    | `Int(mb)` — total journal disk usage      |
-//! | [`old_files`]           | `List(paths)` — files older than N days   |
-//! | [`broken_symlinks`]     | `List(paths)` — broken symlink paths      |
-//! | [`sysctl_conflicts`]    | `List(descriptions)` — conflicting keys   |
-//! | [`kernel_inventory`]    | `List(pkgs)` — unused kernel packages     |
-//! | [`stale_kernel_headers`]| `List(pkgs)` — stale header packages      |
+//! | Capability                    | Returns                                      |
+//! |-------------------------------|----------------------------------------------|
+//! | [`journal_usage_mb`]          | `Int(mb)` — total journal disk usage         |
+//! | [`old_files`]                 | `List(paths)` — files older than N days      |
+//! | [`broken_symlinks`]           | `List(paths)` — broken symlink paths         |
+//! | [`sysctl_conflicts`]          | `List(descriptions)` — conflicting keys      |
+//! | [`kernel_inventory`]          | `List(pkgs)` — unused kernel packages        |
+//! | [`stale_kernel_headers`]      | `List(pkgs)` — stale header packages         |
+//! | [`large_initramfs`]           | `List(entries)` — oversized initramfs images |
+//! | [`legacy_apt_sources`]        | `List(paths)` — legacy APT source files      |
+//! | [`legacy_network_interfaces`] | `Str(status)` — ifupdown overlap state       |
+//! | [`installed_denylist`]        | `List(entries)` — installed denied packages  |
 
 use std::{fs, path::Path};
 
@@ -196,30 +200,6 @@ pub fn stale_kernel_headers(runner: &dyn CommandRunner) -> Result<RuleValue> {
         .collect();
 
     Ok(RuleValue::List(stale))
-}
-
-// ── NtpActiveServices ─────────────────────────────────────────────────────────
-
-/// Return a `List` of active NTP service labels.
-///
-/// Checks `ntp`, `chrony`, `openntpd`, and `systemd-timesyncd`.
-pub fn ntp_active_services(runner: &dyn CommandRunner) -> Result<RuleValue> {
-    let candidates = [
-        ("ntp", "ntp (ntpd)"),
-        ("chrony", "chrony"),
-        ("openntpd", "openntpd"),
-        ("systemd-timesyncd", "systemd-timesyncd"),
-    ];
-    let active: Vec<RuleValue> = candidates
-        .iter()
-        .filter(|(svc, _)| {
-            runner
-                .run("systemctl", &["is-active", "--quiet", svc])
-                .is_ok_and(|o| o.success)
-        })
-        .map(|(_, label)| RuleValue::Str((*label).into()))
-        .collect();
-    Ok(RuleValue::List(active))
 }
 
 // ── LargeInitramfs ────────────────────────────────────────────────────────────

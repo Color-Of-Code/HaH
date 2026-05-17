@@ -1,13 +1,20 @@
 rules:
   - id: ntp-conflict
     title: Multiple NTP services active simultaneously
+
+    only_if:
+      require_commands:
+        - systemctl
+
     triggers:
       - name: active_ntp
-        capability:
-          type: ntp_active_services
+        command:
+          program: sh
+          args: ["-c", "for s in ntp chrony openntpd systemd-timesyncd; do systemctl is-active --quiet \"$s\" 2>/dev/null && printf '%s\\n' \"$s\"; done; true"]
+
     values:
-      ntp_count: "$active_ntp | count"
-      ntp_list: "$active_ntp | join(', ')"
+      ntp_count: "$active_ntp | lines | non_empty | count"
+      ntp_list: "$active_ntp | lines | non_empty | join(', ')"
     conditions:
       - type: numeric_threshold
         value: "$ntp_count"

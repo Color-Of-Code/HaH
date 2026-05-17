@@ -117,6 +117,10 @@ Available capabilities:
 | `sysctl_conflicts` | `List(descriptions)` | Conflicting sysctl key assignments across `sysctl.d` files |
 | `kernel_inventory` | `List(pkgs)` | Installed kernel packages (running kernel + all candidates) |
 | `stale_kernel_headers` | `List(pkgs)` | `linux-headers-*` packages with no matching `linux-image-*` |
+| `large_initramfs` | `List(entries)` | Initramfs images exceeding `threshold_mb` |
+| `legacy_apt_sources` | `List(paths)` | Files using legacy one-line `deb` format |
+| `legacy_network_interfaces` | `Str(status)` | `/etc/network/interfaces` overlap state |
+| `installed_denylist` | `List(entries)` | Installed packages matching the config denylist |
 
 ---
 
@@ -321,6 +325,7 @@ See [`rules/`](../rules/) for the default rule set shipped with HaH:
 | `autoremovable.yaml` | Command trigger, `non_empty`, list pipeline |
 | `residual-config.yaml` | `starts_with` / `prefix_strip`, block reuse |
 | `legacy-ntp.yaml` | Multi-probe rule, `all` / `any` conditions |
+| `ntp-conflict.yaml` | Shell command trigger, `non_empty`, `count` |
 | `snap-apt-duplicate.yaml` | `intersect`, `reject_in`, `for_each` multi-finding |
 | `resolved-config.yaml` | `symlink_target` probe, `contains` condition |
 | `old-crash-dumps.yaml` | `old_files` capability, `for_each` per-item findings |
