@@ -2,13 +2,12 @@
 
 ## Crate Layout
 
-HaH is a Cargo workspace with four crates:
+HaH is a Cargo workspace with three crates:
 
 ```
 hah          (binary)   CLI entry point, check registry, argument parsing
 hah-core     (library)  Data model, Check trait, Config, output renderers, distro detection
 hah-dsl      (library)  YAML rule engine: pipeline evaluator, rule loader, capabilities
-hah-checks   (library)  Compiled check implementations (one module per problem category)
 ```
 
 ### Dependency graph
@@ -16,11 +15,10 @@ hah-checks   (library)  Compiled check implementations (one module per problem c
 ```
 hah
  ├── hah-core
- ├── hah-dsl  ── hah-core
- └── hah-checks ── hah-core
+ └── hah-dsl  ── hah-core
 ```
 
-`hah-dsl` and `hah-checks` never depend on each other; both depend only on `hah-core`.
+All checks are declarative YAML rules backed by capabilities in `hah-dsl`.
 
 ---
 
@@ -54,39 +52,15 @@ enum RuleValue {
 
 ---
 
-## Adding a Compiled Check
+## Adding a Check
 
-1. Add a struct that implements `Check` in the appropriate module under `crates/hah-checks/src/`.
-2. Register the check in `crates/hah/src/registry.rs` inside `all_checks()`.
-3. Write unit tests in the same file using `MockRunner` (a `mockall::mock!` macro) and `make_ctx`.
-4. Run `make check` — the quality gate requires ≥ 95 % line coverage.
+All checks are YAML rules. Drop a `.yaml` file in `rules/` (for the default shipped set) or in
+any directory listed in `rule_dirs` in your config. See [docs/dsl.md](dsl.md) for the full
+language reference.
 
-Minimal skeleton:
-
-```rust
-pub struct MyCheck;
-
-impl Check for MyCheck {
-    fn id(&self) -> &str { "my-check" }
-    fn title(&self) -> &str { "My check title" }
-
-    fn run(&self, ctx: &Context) -> CheckResult {
-        let out = match ctx.runner.run("some-tool", &["--flag"]) {
-            Ok(o) => o,
-            Err(_) => return CheckResult::default(),
-        };
-        // … parse out.stdout, build findings …
-        CheckResult::default()
-    }
-}
-```
-
----
-
-## Adding a YAML Rule
-
-Drop a `.yaml` file in `rules/` (for the default shipped set) or in any directory listed in
-`rule_dirs` in your config. See [docs/dsl.md](dsl.md) for the full language reference.
+For complex data-gathering logic, add a capability function in
+`crates/hah-dsl/src/capabilities.rs`, register a `CapabilitySpec` variant in `rule.rs`, and
+reference it from the YAML rule via `capability: { type: my_capability }`.
 
 ---
 
@@ -98,7 +72,7 @@ Drop a `.yaml` file in `rules/` (for the default shipped set) or in any director
 `mockall::automock`:
 
 ```toml
-# dev-dependencies of hah-dsl / hah-checks
+# dev-dependencies of hah-dsl
 hah-core = { path = "../hah-core", features = ["mock"] }
 ```
 
@@ -107,9 +81,6 @@ let mut mock = MockCommandRunner::new();
 mock.expect_run()
     .returning(|_, _| Ok(CommandOutput { stdout: b"output".to_vec(), .. }));
 ```
-
-The `hah-checks` tests define a local `mockall::mock!` for `CommandRunner` (same interface) to
-keep dev-dep cycles simple.
 
 ### Pattern for check tests
 

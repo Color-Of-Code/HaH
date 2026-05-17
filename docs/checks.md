@@ -1,18 +1,17 @@
 # Built-in Checks
 
-HaH ships a set of read-only diagnostic checks organised by problem category.
+HaH ships a set of read-only diagnostic checks as declarative YAML rules backed
+by capabilities. All checks are loaded from YAML at startup.
 Run `hah list-checks` to see every registered check with its ID and title.
 
 ---
 
 ## Boot & Kernel
 
-Implemented in `crates/hah-checks/src/boot.rs`.
-
 | Check ID                | What it detects | Threshold |
 | ----------------------- | --------------- | --------- |
 | `boot-space`            | Free space on `/boot` below threshold | `boot_space_mb` (default 100 MB) |
-| `unused-kernels`        | Installed kernel packages that do not match the running kernel; the running kernel is never flagged | — |
+| `unused-kernels`        | Installed kernel packages that do not match the running kernel | — |
 | `stale-kernel-headers`  | `linux-headers-*` packages with no matching `linux-image-*` | — |
 | `initramfs-size`        | initramfs images in `/boot` that exceed the size threshold | `initramfs_size_mb` (default 100 MB) |
 | `initramfs-compression` | Compression method in `/etc/initramfs-tools/initramfs.conf` not set to `zstd` or `lz4` | — |
@@ -21,8 +20,6 @@ Implemented in `crates/hah-checks/src/boot.rs`.
 ---
 
 ## APT & Packages
-
-Implemented in `crates/hah-checks/src/apt.rs`.
 
 | Check ID                | What it detects |
 | ----------------------- | --------------- |
@@ -37,8 +34,6 @@ Implemented in `crates/hah-checks/src/apt.rs`.
 
 ## Snap
 
-Implemented in `crates/hah-checks/src/snap.rs`.
-
 | Check ID             | What it detects | Threshold |
 | -------------------- | --------------- | --------- |
 | `snap-health`        | Disabled Snap revisions; more retained revisions than allowed | `snap_max_revisions` (default 2) |
@@ -47,8 +42,6 @@ Implemented in `crates/hah-checks/src/snap.rs`.
 ---
 
 ## Network Configuration
-
-Implemented in `crates/hah-checks/src/network.rs`.
 
 | Check ID                    | What it detects |
 | --------------------------- | --------------- |
@@ -62,8 +55,6 @@ Implemented in `crates/hah-checks/src/network.rs`.
 
 ## System Drift & Sysctl
 
-Implemented in `crates/hah-checks/src/drift.rs` and `sysctl.rs`.
-
 | Check ID          | What it detects | Threshold |
 | ----------------- | --------------- | --------- |
 | `broken-symlinks` | Broken symlinks under `/etc`, `/usr/lib`, and `/var/lib` | — |
@@ -73,13 +64,14 @@ Implemented in `crates/hah-checks/src/drift.rs` and `sysctl.rs`.
 
 ---
 
-## YAML Rule-based Checks
+## Rule Loading
 
-In addition to the compiled checks above, HaH loads YAML rule files at startup from:
+YAML rules are loaded from these directories at startup:
 
+- `rules/` (shipped defaults)
+- `/usr/share/hah/rules/`
 - `/etc/hah/rules.d/*.yaml`
 - `~/.config/hah/rules.d/*.yaml`
 - Any paths listed in `rule_dirs` in the config file
 
-The default rule set is in [`rules/`](../rules/).
 See [`docs/dsl.md`](dsl.md) for the full rule language reference.

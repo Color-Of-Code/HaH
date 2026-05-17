@@ -8,8 +8,7 @@ HaH is organized as a Cargo workspace:
 
 - `hah`: The main CLI binary.
 - `hah-core`: Core data models, traits, and common functionality.
-- `hah-checks`: Implementations of built-in diagnostic checks.
-- `hah-dsl`: YAML rule engine for custom, data-driven checks.
+- `hah-dsl`: YAML rule engine, pipeline evaluator, and capability functions.
 - `hah-utils`: Low-level shared utilities and library facades.
 
 ## Key Concepts
