@@ -81,5 +81,5 @@ In addition to the compiled checks above, HaH loads YAML rule files at startup f
 - `~/.config/hah/rules.d/*.yaml`
 - Any paths listed in `rule_dirs` in the config file
 
-Example rule files are provided in [`examples/rules/`](../examples/rules/).
+The default rule set is in [`rules/`](../rules/).
 See [`docs/dsl.md`](dsl.md) for the full rule language reference.

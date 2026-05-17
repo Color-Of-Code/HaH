@@ -16,7 +16,7 @@ HaH loads all `*.yaml` files from the following directories at startup, in this 
 3. Any directories listed under `rule_dirs` in the config file
 
 Duplicate rule IDs across files are rejected with a clear error at load time.
-Example rule files are in [`examples/rules/`](../examples/rules/).
+The default rule set shipped with HaH is in [`rules/`](../rules/).
 
 ---
 
@@ -55,7 +55,8 @@ triggers:
 
 ### Probe trigger
 
-Check whether a package is installed or a service is active without running a custom command.
+Check whether a package is installed, a service is active, or get a file's size without running
+a custom command.
 
 ```yaml
 triggers:
@@ -68,6 +69,23 @@ triggers:
     probe:
       type: service_active
       name: chrony
+
+  - name: gpg_size
+    probe:
+      type: file_size
+      path: /etc/apt/trusted.gpg
+```
+
+### File trigger
+
+Read a file's contents into a string variable. Returns `Null` if the file cannot be read;
+combine with `require_files` in `only_if` to skip the rule entirely when the file is absent.
+
+```yaml
+triggers:
+  - name: conf_content
+    file:
+      path: /etc/initramfs-tools/initramfs.conf
 ```
 
 ### Capability trigger
@@ -114,15 +132,17 @@ condition operands.
 | ------ | ----------- |
 | `trim` | Strip leading/trailing whitespace from a string |
 | `lines` | Split a string into a list of lines |
-| `non_empty` | Remove empty strings from a list |
+| `non_empty` | Remove empty strings and nulls from a list |
 | `skip(n)` | Drop the first _n_ items from a list |
 | `first` | Take the first item of a list |
+| `last` | Take the last item of a list |
 | `nth(n)` | Take the _n_-th item (0-based) |
 | `number` | Parse a string as an integer or float |
 | `field(n)` | Take the _n_-th whitespace-separated field from a string |
 | `prefix_strip(p)` | Remove a leading prefix _p_ from each string in a list |
 | `starts_with(p)` | Keep only list items that start with _p_ |
-| `contains(v)` | Keep only list items that contain substring _v_ |
+| `contains(v)` | Check whether a string or list contains substring _v_ (returns `Bool`) |
+| `icontains(v)` | Case-insensitive version of `contains`; on a list, keeps matching items |
 | `reject_contains(v)` | Drop list items that contain substring _v_ |
 | `join(sep)` | Join a list of strings into one string with separator _sep_ |
 | `default(v)` | Return _v_ if the current value is `Null` |
@@ -130,6 +150,8 @@ condition operands.
 | `sort` | Sort a list alphabetically |
 | `unique` | Remove duplicate items from a list |
 | `bytes_to_mb` | Divide a byte count integer by 1 048 576 and return an `Int` |
+| `group_count(n)` | Group list items by whitespace-field _n_, return `"count key"` strings |
+| `where_gt(n)` | Keep only items whose first field (parsed as int) exceeds _n_ |
 
 ---
 
@@ -192,8 +214,19 @@ Guards prevent a rule from running when its environment preconditions are not me
 ```yaml
 only_if:
   distro_family: debian        # run only on Debian/Ubuntu/Mint
-  command_exists: snap         # run only when 'snap' is on PATH
-  package_installed: ntp       # run only when the ntp package is present
+  require_commands:            # run only when these commands are on PATH
+    - dkms
+    - snap
+  require_files:               # run only when these files exist
+    - /etc/initramfs-tools/initramfs.conf
+```
+
+Legacy single-value keys are also supported:
+
+```yaml
+only_if:
+  command_exists: snap
+  package_installed: ntp
   service_active: systemd-resolved
 ```
 
@@ -267,7 +300,7 @@ cause a load error.
 
 ## Complete Examples
 
-See [`examples/rules/`](../examples/rules/) for working rule files included with HaH:
+See [`rules/`](../rules/) for the default rule set shipped with HaH:
 
 | File | What it demonstrates |
 | ---- | -------------------- |
@@ -278,4 +311,10 @@ See [`examples/rules/`](../examples/rules/) for working rule files included with
 | `journal-size.yaml` | `journal_usage` capability |
 | `sysctl-ordering.yaml` | `sysctl_conflicts` capability |
 | `unused-kernels.yaml` | `kernel_inventory` capability, `reject_contains` |
-| `broken-symlinks.yaml` | `broken_symlinks` capability
+| `broken-symlinks.yaml` | `broken_symlinks` capability |
+| `initramfs-compression.yaml` | File trigger, `require_files` guard, `starts_with` |
+| `dkms-status.yaml` | `icontains` filter, `require_commands` guard |
+| `snap-health.yaml` | `group_count`, `where_gt`, aggregation pattern |
+| `apt-key.yaml` | `file_size` probe, `numeric_threshold` |
+| `dpkg-state.yaml` | Simple command + `non_empty` condition |
+| `legacy-dhcp-client.yaml` | Multi-probe, `all`/`any` nested conditions |

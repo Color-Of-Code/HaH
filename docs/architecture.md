@@ -85,7 +85,7 @@ impl Check for MyCheck {
 
 ## Adding a YAML Rule
 
-Drop a `.yaml` file in `examples/rules/` (for bundled examples) or in any directory listed in
+Drop a `.yaml` file in `rules/` (for the default shipped set) or in any directory listed in
 `rule_dirs` in your config. See [docs/dsl.md](dsl.md) for the full language reference.
 
 ---
