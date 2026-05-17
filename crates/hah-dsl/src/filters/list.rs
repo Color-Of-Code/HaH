@@ -1,5 +1,6 @@
 use crate::pipeline::RuleValue;
 use anyhow::{Result, anyhow};
+use std::collections::HashMap;
 
 pub fn non_empty(value: RuleValue) -> Result<RuleValue> {
     match value {
@@ -94,6 +95,52 @@ pub fn join(value: RuleValue, sep: &str) -> Result<RuleValue> {
         )),
         RuleValue::Str(s) => Ok(RuleValue::Str(s)),
         other => Err(anyhow!("join: expected a list, got {:?}", other)),
+    }
+}
+
+/// Group list items by whitespace-field `n`, returning `"count key"` strings
+/// sorted alphabetically by key.
+pub fn group_count(value: RuleValue, n: usize) -> Result<RuleValue> {
+    match value {
+        RuleValue::List(v) => {
+            let mut counts: HashMap<String, i64> = HashMap::new();
+            for item in &v {
+                let key = match item {
+                    RuleValue::Str(s) => s.split_whitespace().nth(n).unwrap_or("").to_string(),
+                    _ => String::new(),
+                };
+                *counts.entry(key).or_default() += 1;
+            }
+            let mut pairs: Vec<_> = counts.into_iter().collect();
+            pairs.sort_by(|a, b| a.0.cmp(&b.0));
+            Ok(RuleValue::List(
+                pairs
+                    .into_iter()
+                    .map(|(key, cnt)| RuleValue::Str(format!("{cnt} {key}")))
+                    .collect(),
+            ))
+        }
+        other => Err(anyhow!("group_count: expected a list, got {:?}", other)),
+    }
+}
+
+/// Keep only items whose first whitespace-field (parsed as integer) exceeds
+/// `threshold`.  Designed to follow `group_count`.
+pub fn where_gt(value: RuleValue, threshold: i64) -> Result<RuleValue> {
+    match value {
+        RuleValue::List(v) => Ok(RuleValue::List(
+            v.into_iter()
+                .filter(|item| match item {
+                    RuleValue::Str(s) => s
+                        .split_whitespace()
+                        .next()
+                        .and_then(|n| n.parse::<i64>().ok())
+                        .is_some_and(|n| n > threshold),
+                    _ => false,
+                })
+                .collect(),
+        )),
+        other => Err(anyhow!("where_gt: expected a list, got {:?}", other)),
     }
 }
 
@@ -224,5 +271,48 @@ mod tests {
     #[test]
     fn last_err_on_non_list() {
         assert!(last(sv("x")).is_err());
+    }
+
+    #[test]
+    fn group_count_groups_by_field() {
+        let input = list(&[
+            "firefox 101 rev1",
+            "firefox 101 rev2",
+            "firefox 101 rev3",
+            "chromium 100 rev1",
+        ]);
+        let result = group_count(input, 0).unwrap();
+        assert_eq!(result, list(&["1 chromium", "3 firefox"]));
+    }
+
+    #[test]
+    fn group_count_single_entry_per_key() {
+        let input = list(&["a x", "b y", "c z"]);
+        let result = group_count(input, 0).unwrap();
+        assert_eq!(result, list(&["1 a", "1 b", "1 c"]));
+    }
+
+    #[test]
+    fn group_count_err_on_non_list() {
+        assert!(group_count(sv("x"), 0).is_err());
+    }
+
+    #[test]
+    fn where_gt_filters_by_first_field() {
+        let input = list(&["3 firefox", "1 chromium", "2 vscode"]);
+        let result = where_gt(input, 2).unwrap();
+        assert_eq!(result, list(&["3 firefox"]));
+    }
+
+    #[test]
+    fn where_gt_returns_empty_when_none_exceed() {
+        let input = list(&["1 a", "2 b"]);
+        let result = where_gt(input, 5).unwrap();
+        assert_eq!(result, RuleValue::List(vec![]));
+    }
+
+    #[test]
+    fn where_gt_err_on_non_list() {
+        assert!(where_gt(sv("x"), 1).is_err());
     }
 }

@@ -100,6 +100,14 @@ fn int_arg_filter(name: &str, args: &[RuleValue]) -> Result<Option<Filter>> {
         "skip" => Ok(Some(Filter::Skip(n()?))),
         "nth" => Ok(Some(Filter::Nth(n()?))),
         "field" => Ok(Some(Filter::Field(n()?))),
+        "group_count" => Ok(Some(Filter::GroupCount(n()?))),
+        "where_gt" => {
+            let v = args
+                .first()
+                .and_then(RuleValue::as_int)
+                .ok_or_else(|| anyhow!("where_gt requires an integer argument"))?;
+            Ok(Some(Filter::WhereGt(v)))
+        }
         _ => Ok(None),
     }
 }

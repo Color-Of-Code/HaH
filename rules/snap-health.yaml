@@ -1,0 +1,43 @@
+rules:
+  - id: snap-health
+    title: Snap package health
+
+    only_if:
+      require_commands:
+        - snap
+
+    triggers:
+      - name: snap_output
+        command:
+          program: snap
+          args: ["list", "--all"]
+
+    values:
+      snap_lines: "$snap_output | lines | skip(1) | non_empty"
+      disabled_lines: "$snap_lines | icontains('disabled')"
+      excess_revisions: "$snap_lines | group_count(0) | where_gt(2)"
+
+    conditions:
+      - type: any
+        severity: Info
+        conditions:
+          - type: non_empty
+            value: "$disabled_lines"
+            severity: Info
+          - type: non_empty
+            value: "$excess_revisions"
+            severity: Info
+
+    outcome:
+      finding_id: snap-health
+      title: "Snap revisions need attention"
+      description: >
+        Disabled revisions: {disabled_lines}.
+        Packages with excessive retained revisions: {excess_revisions}.
+        Disabled revisions consume disk space and can be safely removed.
+      remediation:
+        description: "Clean up old snap revisions."
+        commands:
+          - "snap list --all | awk '/disabled/{print $1, $3}'"
+          - "# For each: sudo snap remove <name> --revision=<rev>"
+          - "sudo snap set system refresh.retain=2"

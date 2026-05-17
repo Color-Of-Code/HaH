@@ -3,7 +3,7 @@ use hah_checks::{
     boot::InitramfsCheck,
     drift::OldCrashDumpsCheck,
     network::{LegacyNetworkInterfacesCheck, NtpConflictCheck, ResolvedConfigCheck},
-    snap::{SnapAptDuplicateCheck, SnapHealthCheck},
+    snap::SnapAptDuplicateCheck,
 };
 use hah_core::{check::Check, config::Config};
 use hah_dsl::rule::RuleSet;
@@ -37,7 +37,6 @@ pub(crate) fn all_checks(config: &Config) -> Vec<Box<dyn Check>> {
         Box::new(InitramfsCheck),
         Box::new(LegacySourcesFormatCheck),
         Box::new(UserDefinedPackageCheck),
-        Box::new(SnapHealthCheck),
         Box::new(SnapAptDuplicateCheck),
         Box::new(OldCrashDumpsCheck),
         Box::new(NtpConflictCheck),

@@ -116,6 +116,8 @@ pub enum Filter {
     Default(String),
     Last,
     IContains(String),
+    GroupCount(usize),
+    WhereGt(i64),
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────

@@ -26,6 +26,8 @@ fn apply_list(
         Filter::Skip(n) => Ok(list::skip(value, *n)),
         Filter::Nth(n) => Ok(list::nth(value, *n)),
         Filter::Join(s) => Ok(list::join(value, s)),
+        Filter::GroupCount(n) => Ok(list::group_count(value, *n)),
+        Filter::WhereGt(threshold) => Ok(list::where_gt(value, *threshold)),
         _ => Err((value, filter)),
     }
 }
