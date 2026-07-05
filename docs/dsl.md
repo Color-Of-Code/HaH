@@ -162,6 +162,7 @@ condition operands.
 | `field(n)` | Take the _n_-th whitespace-separated field from a string |
 | `prefix_strip(p)` | Remove a leading prefix _p_ from each string in a list |
 | `prefix_add(p)` | Add prefix _p_ to each string in a list or string |
+| `suffix_strip(s)` | Remove a trailing suffix _s_ from each string in a list or string |
 | `starts_with(p)` | Keep only list items that start with _p_ |
 | `contains(v)` | Check whether a string or list contains substring _v_ (returns `Bool`) |
 | `icontains(v)` | Case-insensitive version of `contains`; on a list, keeps matching items |

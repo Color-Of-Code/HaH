@@ -88,6 +88,16 @@ pub fn prefix_add(value: RuleValue, prefix: &str) -> Result<RuleValue> {
     }
 }
 
+/// Strip a trailing suffix from each string value, or from a single string input.
+pub fn suffix_strip(value: RuleValue, suffix: &str) -> Result<RuleValue> {
+    match value {
+        RuleValue::Null => Ok(RuleValue::Null),
+        other => map_string_or_list(other, "suffix_strip", |s| {
+            RuleValue::Str(s.strip_suffix(suffix).unwrap_or(s).to_string())
+        }),
+    }
+}
+
 pub fn starts_with(value: RuleValue, prefix: &str) -> Result<RuleValue> {
     match value {
         RuleValue::List(_) => {
@@ -230,6 +240,22 @@ mod tests {
         assert_eq!(
             prefix_add(list(&["1", "2"]), "linux-image-").unwrap(),
             list(&["linux-image-1", "linux-image-2"])
+        );
+    }
+
+    #[test]
+    fn suffix_strip_str() {
+        assert_eq!(
+            suffix_strip(sv("6.8.0-134-generic"), "-generic").unwrap(),
+            sv("6.8.0-134")
+        );
+    }
+
+    #[test]
+    fn suffix_strip_list() {
+        assert_eq!(
+            suffix_strip(list(&["1-generic", "2-generic"]), "-generic").unwrap(),
+            list(&["1", "2"])
         );
     }
 

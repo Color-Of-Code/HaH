@@ -100,6 +100,7 @@ impl Filter {
         unary_arg_filters!(name, Self::require_str_arg(name, args)?.to_string();
             "prefix_strip" => PrefixStrip,
             "prefix_add" => PrefixAdd,
+            "suffix_strip" => SuffixStrip,
             "starts_with" => StartsWith,
             "contains" => Contains,
             "reject_contains" => RejectContains,
