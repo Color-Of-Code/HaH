@@ -95,7 +95,7 @@ impl RuleValue {
             Self::Bool(b) => *b,
             Self::Int(n) => *n != 0,
             Self::Str(s) => !s.is_empty(),
-            Self::List(v) => !v.is_empty(),
+            Self::List(v) => v.iter().any(|item| !item.is_blank() && item.is_truthy()),
             Self::Null => false,
         }
     }
@@ -252,9 +252,15 @@ mod tests {
         assert!(!RuleValue::Int(0).is_truthy());
         assert!(RuleValue::Str("x".into()).is_truthy());
         assert!(!RuleValue::Str(String::new()).is_truthy());
-        assert!(RuleValue::List(vec![RuleValue::Null]).is_truthy());
+        assert!(!RuleValue::List(vec![RuleValue::Null]).is_truthy());
         assert!(!RuleValue::List(vec![]).is_truthy());
         assert!(!RuleValue::Null.is_truthy());
+    }
+
+    #[test]
+    fn rule_value_is_truthy_treats_blank_only_lists_as_false() {
+        assert!(!RuleValue::List(vec![RuleValue::Str(String::new())]).is_truthy());
+        assert!(!RuleValue::List(vec![RuleValue::Bool(false)]).is_truthy());
     }
 
     #[test]
