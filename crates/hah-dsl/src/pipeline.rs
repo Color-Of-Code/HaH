@@ -84,7 +84,23 @@ impl RuleValue {
             Self::Bool(b) => b.to_string(),
             Self::Int(n) => n.to_string(),
             Self::Str(s) => s.clone(),
-            Self::List(v) => v.iter().map(Self::display).collect::<Vec<_>>().join(", "),
+            Self::List(v) => {
+                let indent = " ".repeat(12);
+                if v.is_empty() {
+                    return String::new();
+                }
+
+                let mut rendered = String::from("\n");
+                rendered.push_str(&indent);
+                for (idx, item) in v.iter().enumerate() {
+                    if idx > 0 {
+                        rendered.push('\n');
+                        rendered.push_str(&indent);
+                    }
+                    rendered.push_str(&item.display());
+                }
+                rendered
+            }
             Self::Null => String::new(),
         }
     }
@@ -240,7 +256,7 @@ mod tests {
         assert_eq!(RuleValue::Null.display(), "");
         assert_eq!(
             RuleValue::List(vec![sv("a"), RuleValue::Int(1)]).display(),
-            "a, 1"
+            "\n            a\n            1"
         );
     }
 
