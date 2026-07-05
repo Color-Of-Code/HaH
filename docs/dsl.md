@@ -151,6 +151,7 @@ condition operands.
 | Filter | Description |
 | ------ | ----------- |
 | `trim` | Strip leading/trailing whitespace from a string |
+| `regex_escape` | Escape regex metacharacters so a string can be used literally in a regex pattern |
 | `lines` | Split a string into a list of lines |
 | `non_empty` | Remove empty strings and nulls from a list |
 | `skip(n)` | Drop the first _n_ items from a list |
@@ -178,8 +179,10 @@ condition operands.
 | `where_gt(n)` | Keep only items whose first field (parsed as int) exceeds _n_ |
 | `intersect($var)` | Set intersection: keep only items whose value appears in the list variable _$var_ |
 | `reject_in($var)` | Set subtraction: remove items whose value appears in the list variable _$var_ |
-| `grep(pattern)` | Keep list items (or a string) whose text matches the regex _pattern_ |
-| `reject_grep(pattern)` | Remove list items (or a string) whose text matches the regex _pattern_ |
+| `grep(pattern)` | Keep list items (or a string) whose text matches any regex _pattern_ |
+| `reject_grep(pattern)` | Remove list items (or a string) whose text matches any regex _pattern_ |
+
+Use `grep`/`reject_grep` for regex-based filtering. They accept either a single pattern or a list of patterns, and match when any supplied pattern matches. For literal set-style matching, prefer `intersect` and `reject_in`.
 
 Patterns for `grep` and `reject_grep` are Rust regular expressions. Use `(?i)` for
 case-insensitive matching. Applied to a bare `Str`, both filters return a list:

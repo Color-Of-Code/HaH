@@ -46,6 +46,7 @@ impl Filter {
     fn zero_arg(name: &str) -> Option<Self> {
         zero_arg_filters!(name;
             "trim" => Trim,
+            "regex_escape" => RegexEscape,
             "lines" => Lines,
             "non_empty" => NonEmpty,
             "first" => First,
@@ -97,32 +98,80 @@ impl Filter {
     }
 
     fn str_arg(name: &str, args: &[RuleValue]) -> Result<Option<Self>> {
-        unary_arg_filters!(name, Self::require_str_arg(name, args)?.to_string();
-            "prefix_strip" => PrefixStrip,
-            "prefix_add" => PrefixAdd,
-            "suffix_strip" => SuffixStrip,
-            "starts_with" => StartsWith,
-            "contains" => Contains,
-            "reject_contains" => RejectContains,
-            "icontains" => IContains,
-            "join" => Join,
-            "default" => Default,
-            "grep" => Grep,
-            "reject_grep" => RejectGrep,
-        )
+        match name {
+            "grep" | "reject_grep" => {
+                let patterns = match args.first() {
+                    Some(RuleValue::List(items)) => items.iter().map(RuleValue::display).collect(),
+                    Some(RuleValue::Null) => Vec::new(),
+                    _ => vec![Self::require_str_arg(name, args)?.to_string()],
+                };
+                Ok(Some(match name {
+                    "grep" => Self::Grep(patterns),
+                    "reject_grep" => Self::RejectGrep(patterns),
+                    _ => unreachable!(),
+                }))
+            }
+            _ => unary_arg_filters!(name, Self::require_str_arg(name, args)?.to_string();
+                "prefix_strip" => PrefixStrip,
+                "prefix_add" => PrefixAdd,
+                "suffix_strip" => SuffixStrip,
+                "starts_with" => StartsWith,
+                "contains" => Contains,
+                "reject_contains" => RejectContains,
+                "icontains" => IContains,
+                "join" => Join,
+                "default" => Default,
+            ),
+        }
     }
 
     fn list_arg(name: &str, args: &[RuleValue]) -> Result<Option<Self>> {
         match name {
-            "intersect" | "reject_in" => {
+            "intersect" | "reject_in" | "reject_matches" => {
                 let items = Self::require_list_arg(name, args)?;
                 let strings: Vec<String> = items.iter().map(RuleValue::display).collect();
                 Ok(Some(match name {
                     "intersect" => Self::Intersect(strings),
+                    "reject_matches" => Self::RejectMatches(strings),
                     _ => Self::RejectIn(strings),
                 }))
             }
             _ => Ok(None),
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_grep_accepts_list_argument() {
+        let filter = Filter::build(
+            "grep",
+            vec![RuleValue::List(vec![
+                RuleValue::Str("error".into()),
+                RuleValue::Str("warn".into()),
+            ])],
+        )
+        .expect("grep filter should build from a list argument");
+        assert_eq!(filter, Filter::Grep(vec!["error".into(), "warn".into()]));
+    }
+
+    #[test]
+    fn build_reject_grep_accepts_list_argument() {
+        let filter = Filter::build(
+            "reject_grep",
+            vec![RuleValue::List(vec![
+                RuleValue::Str("error".into()),
+                RuleValue::Str("warn".into()),
+            ])],
+        )
+        .expect("reject_grep filter should build from a list argument");
+        assert_eq!(
+            filter,
+            Filter::RejectGrep(vec!["error".into(), "warn".into()])
+        );
     }
 }

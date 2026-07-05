@@ -47,8 +47,9 @@ impl Filter {
             Filter::WhereGt(threshold) => Ok(list::where_gt(value, *threshold)),
             Filter::Intersect(other) => Ok(list::intersect(value, other)),
             Filter::RejectIn(other) => Ok(list::reject_in(value, other)),
-            Filter::Grep(p) => Ok(list::grep(value, p)),
-            Filter::RejectGrep(p) => Ok(list::reject_grep(value, p)),
+            Filter::RejectMatches(other) => Ok(list::reject_matches(value, other)),
+            Filter::Grep(patterns) => Ok(list::grep(value, patterns)),
+            Filter::RejectGrep(patterns) => Ok(list::reject_grep(value, patterns)),
             _ => Err(value),
         }
     }
@@ -56,6 +57,7 @@ impl Filter {
     fn apply_string(&self, value: RuleValue) -> std::result::Result<Result<RuleValue>, RuleValue> {
         match self {
             Filter::Trim => Ok(string::trim(value)),
+            Filter::RegexEscape => Ok(string::regex_escape(value)),
             Filter::Lines => Ok(string::lines(value)),
             Filter::Field(n) => Ok(string::field(value, *n)),
             Filter::PrefixStrip(s) => Ok(string::prefix_strip(value, s)),

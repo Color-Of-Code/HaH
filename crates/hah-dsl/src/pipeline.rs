@@ -126,6 +126,7 @@ pub type ValueMap = HashMap<String, RuleValue>;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Filter {
     Trim,
+    RegexEscape,
     Lines,
     NonEmpty,
     Skip(usize),
@@ -151,8 +152,9 @@ pub enum Filter {
     WhereGt(i64),
     Intersect(Vec<String>),
     RejectIn(Vec<String>),
-    Grep(String),
-    RejectGrep(String),
+    RejectMatches(Vec<String>),
+    Grep(Vec<String>),
+    RejectGrep(Vec<String>),
     Conflicts,
     ToBytes,
 }

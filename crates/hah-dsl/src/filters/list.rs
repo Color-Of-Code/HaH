@@ -154,47 +154,87 @@ pub fn reject_in(value: RuleValue, other: &[String]) -> Result<RuleValue> {
     ))
 }
 
-/// Keep only list items (or the string itself) that match `pattern`.
+/// Remove items whose display form matches any regex pattern in `other`.
+pub fn reject_matches(value: RuleValue, other: &[String]) -> Result<RuleValue> {
+    let items = list_items(value).map_err(|e| anyhow!("reject_matches: {e}"))?;
+    let regexes = other
+        .iter()
+        .map(|pattern| {
+            Regex::new(pattern)
+                .map_err(|e| anyhow!("reject_matches: invalid regex {:?}: {}", pattern, e))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(RuleValue::List(
+        items
+            .into_iter()
+            .filter(|item| {
+                let text = item.display();
+                !regexes.iter().any(|re| re.is_match(&text))
+            })
+            .collect(),
+    ))
+}
+
+/// Keep only list items (or the string itself) that match any provided pattern.
 ///
 /// Applied to a `Str`, returns a single-item list when the string matches,
 /// or an empty list when it does not.
-pub fn grep(value: RuleValue, pattern: &str) -> Result<RuleValue> {
-    let re =
-        Regex::new(pattern).map_err(|e| anyhow!("grep: invalid regex {:?}: {}", pattern, e))?;
+pub fn grep(value: RuleValue, patterns: &[String]) -> Result<RuleValue> {
+    let regexes = patterns
+        .iter()
+        .map(|pattern| {
+            Regex::new(pattern).map_err(|e| anyhow!("grep: invalid regex {:?}: {}", pattern, e))
+        })
+        .collect::<Result<Vec<_>>>()?;
     match value {
         RuleValue::List(v) => Ok(RuleValue::List(
             v.into_iter()
-                .filter(|item| re.is_match(&item.display()))
+                .filter(|item| {
+                    let text = item.display();
+                    regexes.iter().any(|re| re.is_match(&text))
+                })
                 .collect(),
         )),
-        RuleValue::Str(s) => Ok(RuleValue::List(if re.is_match(&s) {
-            vec![RuleValue::Str(s)]
-        } else {
-            vec![]
-        })),
+        RuleValue::Str(s) => Ok(RuleValue::List(
+            if regexes.iter().any(|re| re.is_match(&s)) {
+                vec![RuleValue::Str(s)]
+            } else {
+                vec![]
+            },
+        )),
         RuleValue::Null => Ok(RuleValue::List(vec![])),
         other => Err(anyhow!("grep: expected a list or string, got {:?}", other)),
     }
 }
 
-/// Remove list items (or the string itself) that match `pattern`.
+/// Remove list items (or the string itself) that match any provided pattern.
 ///
 /// Applied to a `Str`, returns an empty list when the string matches,
 /// or a single-item list when it does not.
-pub fn reject_grep(value: RuleValue, pattern: &str) -> Result<RuleValue> {
-    let re = Regex::new(pattern)
-        .map_err(|e| anyhow!("reject_grep: invalid regex {:?}: {}", pattern, e))?;
+pub fn reject_grep(value: RuleValue, patterns: &[String]) -> Result<RuleValue> {
+    let regexes = patterns
+        .iter()
+        .map(|pattern| {
+            Regex::new(pattern)
+                .map_err(|e| anyhow!("reject_grep: invalid regex {:?}: {}", pattern, e))
+        })
+        .collect::<Result<Vec<_>>>()?;
     match value {
         RuleValue::List(v) => Ok(RuleValue::List(
             v.into_iter()
-                .filter(|item| !re.is_match(&item.display()))
+                .filter(|item| {
+                    let text = item.display();
+                    !regexes.iter().any(|re| re.is_match(&text))
+                })
                 .collect(),
         )),
-        RuleValue::Str(s) => Ok(RuleValue::List(if re.is_match(&s) {
-            vec![]
-        } else {
-            vec![RuleValue::Str(s)]
-        })),
+        RuleValue::Str(s) => Ok(RuleValue::List(
+            if regexes.iter().any(|re| re.is_match(&s)) {
+                vec![]
+            } else {
+                vec![RuleValue::Str(s)]
+            },
+        )),
         RuleValue::Null => Ok(RuleValue::List(vec![])),
         other => Err(anyhow!(
             "reject_grep: expected a list or string, got {:?}",
@@ -504,6 +544,14 @@ mod tests {
     }
 
     #[test]
+    fn reject_matches_removes_matching_items() {
+        let input = list(&["headers-6.8.0-134", "headers-6.8.0-135"]);
+        let other = vec![regex::escape("6.8.0-134"), regex::escape("6.8.0-136")];
+        let result = reject_matches(input, &other).unwrap();
+        assert_eq!(result, list(&["headers-6.8.0-135"]));
+    }
+
+    #[test]
     fn reject_in_err_on_non_list() {
         assert!(reject_in(sv("x"), &["y".to_string()]).is_err());
     }
@@ -519,55 +567,69 @@ mod tests {
     #[test]
     fn grep_keeps_matching_items() {
         let input = list(&["error: disk full", "info: all good", "warn: memory high"]);
-        let result = grep(input, "(?i)(error|warn)").unwrap();
+        let result = grep(input, &["(?i)(error|warn)".to_string()]).unwrap();
+        assert_eq!(result, list(&["error: disk full", "warn: memory high"]));
+    }
+
+    #[test]
+    fn grep_accepts_multiple_patterns_and_matches_any() {
+        let input = list(&["error: disk full", "info: all good", "warn: memory high"]);
+        let result = grep(input, &["error".to_string(), "warn".to_string()]).unwrap();
         assert_eq!(result, list(&["error: disk full", "warn: memory high"]));
     }
 
     #[test]
     fn grep_on_string_returns_list() {
         assert_eq!(
-            grep(sv("error: bad"), "error").unwrap(),
+            grep(sv("error: bad"), &["error".to_string()]).unwrap(),
             list(&["error: bad"])
         );
         assert_eq!(
-            grep(sv("info: ok"), "error").unwrap(),
+            grep(sv("info: ok"), &["error".to_string()]).unwrap(),
             RuleValue::List(vec![])
         );
     }
 
     #[test]
     fn grep_invalid_pattern_errors() {
-        assert!(grep(list(&["x"]), "[invalid").is_err());
+        assert!(grep(list(&["x"]), &["[invalid".to_string()]).is_err());
     }
 
     #[test]
     fn reject_grep_removes_matching_items() {
         let input = list(&["error: disk full", "info: all good", "warn: memory high"]);
-        let result = reject_grep(input, "(?i)(error|warn)").unwrap();
+        let result = reject_grep(input, &["(?i)(error|warn)".to_string()]).unwrap();
+        assert_eq!(result, list(&["info: all good"]));
+    }
+
+    #[test]
+    fn reject_grep_accepts_multiple_patterns_and_matches_any() {
+        let input = list(&["error: disk full", "info: all good", "warn: memory high"]);
+        let result = reject_grep(input, &["error".to_string(), "warn".to_string()]).unwrap();
         assert_eq!(result, list(&["info: all good"]));
     }
 
     #[test]
     fn reject_grep_on_string_returns_list() {
         assert_eq!(
-            reject_grep(sv("info: ok"), "error").unwrap(),
+            reject_grep(sv("info: ok"), &["error".to_string()]).unwrap(),
             list(&["info: ok"])
         );
         assert_eq!(
-            reject_grep(sv("error: bad"), "error").unwrap(),
+            reject_grep(sv("error: bad"), &["error".to_string()]).unwrap(),
             RuleValue::List(vec![])
         );
     }
 
     #[test]
     fn reject_grep_invalid_pattern_errors() {
-        assert!(reject_grep(list(&["x"]), "[invalid").is_err());
+        assert!(reject_grep(list(&["x"]), &["[invalid".to_string()]).is_err());
     }
 
     #[test]
     fn reject_grep_null_returns_empty_list() {
         assert_eq!(
-            reject_grep(RuleValue::Null, "error").unwrap(),
+            reject_grep(RuleValue::Null, &["error".to_string()]).unwrap(),
             RuleValue::List(vec![])
         );
     }

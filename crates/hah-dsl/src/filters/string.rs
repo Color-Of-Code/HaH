@@ -49,6 +49,25 @@ pub fn trim(value: RuleValue) -> Result<RuleValue> {
     map_string_or_list(value, "trim", |s| RuleValue::Str(s.trim().to_string()))
 }
 
+pub fn regex_escape(value: RuleValue) -> Result<RuleValue> {
+    match value {
+        RuleValue::Null => Ok(RuleValue::Null),
+        RuleValue::Str(s) => Ok(RuleValue::Str(regex::escape(&s))),
+        RuleValue::List(v) => Ok(RuleValue::List(
+            v.into_iter()
+                .map(|item| match item {
+                    RuleValue::Str(s) => RuleValue::Str(regex::escape(&s)),
+                    other => other,
+                })
+                .collect(),
+        )),
+        other => Err(anyhow!(
+            "regex_escape: expected a string or list, got {:?}",
+            other
+        )),
+    }
+}
+
 pub fn lines(value: RuleValue) -> Result<RuleValue> {
     match value {
         RuleValue::Str(s) => Ok(RuleValue::List(
@@ -166,6 +185,14 @@ mod tests {
     #[test]
     fn trim_err_on_non_str_non_list() {
         assert!(trim(RuleValue::Int(1)).is_err());
+    }
+
+    #[test]
+    fn regex_escape_escapes_regex_metacharacters() {
+        assert_eq!(
+            regex_escape(sv("foo.bar+baz?")).unwrap(),
+            sv("foo\\.bar\\+baz\\?")
+        );
     }
 
     #[test]
