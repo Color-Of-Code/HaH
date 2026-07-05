@@ -71,9 +71,12 @@ pub fn field(value: RuleValue, n: usize) -> Result<RuleValue> {
 }
 
 pub fn prefix_strip(value: RuleValue, prefix: &str) -> Result<RuleValue> {
-    map_string_or_list(value, "prefix_strip", |s| {
-        RuleValue::Str(s.strip_prefix(prefix).unwrap_or(s).to_string())
-    })
+    match value {
+        RuleValue::Null => Ok(RuleValue::Null),
+        other => map_string_or_list(other, "prefix_strip", |s| {
+            RuleValue::Str(s.strip_prefix(prefix).unwrap_or(s).to_string())
+        }),
+    }
 }
 
 pub fn starts_with(value: RuleValue, prefix: &str) -> Result<RuleValue> {
@@ -187,6 +190,14 @@ mod tests {
     #[test]
     fn prefix_strip_no_match_unchanged() {
         assert_eq!(prefix_strip(sv("other"), "linux-").unwrap(), sv("other"));
+    }
+
+    #[test]
+    fn prefix_strip_null_returns_null() {
+        assert_eq!(
+            prefix_strip(RuleValue::Null, "linux-").unwrap(),
+            RuleValue::Null
+        );
     }
 
     #[test]
