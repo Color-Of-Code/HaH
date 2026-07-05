@@ -40,6 +40,7 @@ where
                 })
                 .collect(),
         )),
+        RuleValue::Null => Ok(RuleValue::List(vec![])),
         other => Err(anyhow!("{filter_name}: expected a list, got {:?}", other)),
     }
 }
@@ -55,6 +56,7 @@ pub fn lines(value: RuleValue) -> Result<RuleValue> {
                 .map(|line| RuleValue::Str(line.to_string()))
                 .collect(),
         )),
+        RuleValue::Null => Ok(RuleValue::List(vec![])),
         other => Err(anyhow!("lines: expected a string, got {:?}", other)),
     }
 }
@@ -84,6 +86,7 @@ pub fn starts_with(value: RuleValue, prefix: &str) -> Result<RuleValue> {
         } else {
             RuleValue::Null
         }),
+        RuleValue::Null => Ok(RuleValue::Null),
         other => Err(anyhow!(
             "starts_with: expected a list or string, got {:?}",
             other
@@ -215,6 +218,14 @@ mod tests {
     #[test]
     fn starts_with_str_no_match_returns_null() {
         assert_eq!(starts_with(sv("other"), "linux-").unwrap(), RuleValue::Null);
+    }
+
+    #[test]
+    fn starts_with_null_returns_null() {
+        assert_eq!(
+            starts_with(RuleValue::Null, "linux-").unwrap(),
+            RuleValue::Null
+        );
     }
 
     #[test]

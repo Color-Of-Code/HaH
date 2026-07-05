@@ -11,6 +11,7 @@ pub fn non_empty(value: RuleValue) -> Result<RuleValue> {
                 .filter(|item| !matches!(item, RuleValue::Str(s) if s.is_empty()))
                 .collect(),
         )),
+        RuleValue::Null => Ok(RuleValue::List(vec![])),
         other => Err(anyhow!("non_empty: expected a list, got {:?}", other)),
     }
 }
@@ -22,6 +23,7 @@ pub fn first(value: RuleValue) -> Result<RuleValue> {
         } else {
             v.remove(0)
         }),
+        RuleValue::Null => Ok(RuleValue::Null),
         other => Err(anyhow!("first: expected a list, got {:?}", other)),
     }
 }
@@ -33,6 +35,7 @@ pub fn last(value: RuleValue) -> Result<RuleValue> {
         } else {
             v.pop().unwrap_or(RuleValue::Null)
         }),
+        RuleValue::Null => Ok(RuleValue::Null),
         other => Err(anyhow!("last: expected a list, got {:?}", other)),
     }
 }
@@ -46,6 +49,7 @@ pub fn skip(value: RuleValue, n: usize) -> Result<RuleValue> {
                 Ok(RuleValue::List(vec![]))
             }
         }
+        RuleValue::Null => Ok(RuleValue::List(vec![])),
         other => Err(anyhow!("skip: expected a list, got {:?}", other)),
     }
 }
@@ -53,6 +57,7 @@ pub fn skip(value: RuleValue, n: usize) -> Result<RuleValue> {
 pub fn nth(value: RuleValue, n: usize) -> Result<RuleValue> {
     match value {
         RuleValue::List(v) => Ok(v.get(n).cloned().unwrap_or(RuleValue::Null)),
+        RuleValue::Null => Ok(RuleValue::Null),
         other => Err(anyhow!("nth: expected a list, got {:?}", other)),
     }
 }
@@ -71,6 +76,7 @@ pub fn sort(value: RuleValue) -> Result<RuleValue> {
             v.sort_by_key(RuleValue::display);
             Ok(RuleValue::List(v))
         }
+        RuleValue::Null => Ok(RuleValue::List(vec![])),
         other => Err(anyhow!("sort: expected a list, got {:?}", other)),
     }
 }
@@ -82,6 +88,7 @@ pub fn unique(value: RuleValue) -> Result<RuleValue> {
             v.dedup();
             Ok(RuleValue::List(v))
         }
+        RuleValue::Null => Ok(RuleValue::List(vec![])),
         other => Err(anyhow!("unique: expected a list, got {:?}", other)),
     }
 }
@@ -95,6 +102,7 @@ pub fn join(value: RuleValue, sep: &str) -> Result<RuleValue> {
                 .join(sep),
         )),
         RuleValue::Str(s) => Ok(RuleValue::Str(s)),
+        RuleValue::Null => Ok(RuleValue::Str(String::new())),
         other => Err(anyhow!("join: expected a list, got {:?}", other)),
     }
 }
@@ -121,6 +129,7 @@ pub fn group_count(value: RuleValue, n: usize) -> Result<RuleValue> {
                     .collect(),
             ))
         }
+        RuleValue::Null => Ok(RuleValue::List(vec![])),
         other => Err(anyhow!("group_count: expected a list, got {:?}", other)),
     }
 }
@@ -141,6 +150,7 @@ pub fn where_gt(value: RuleValue, threshold: i64) -> Result<RuleValue> {
                 })
                 .collect(),
         )),
+        RuleValue::Null => Ok(RuleValue::List(vec![])),
         other => Err(anyhow!("where_gt: expected a list, got {:?}", other)),
     }
 }
@@ -156,6 +166,7 @@ pub fn intersect(value: RuleValue, other: &[String]) -> Result<RuleValue> {
                     .collect(),
             ))
         }
+        RuleValue::Null => Ok(RuleValue::List(vec![])),
         other_val => Err(anyhow!("intersect: expected a list, got {:?}", other_val)),
     }
 }
@@ -171,6 +182,7 @@ pub fn reject_in(value: RuleValue, other: &[String]) -> Result<RuleValue> {
                     .collect(),
             ))
         }
+        RuleValue::Null => Ok(RuleValue::List(vec![])),
         other_val => Err(anyhow!("reject_in: expected a list, got {:?}", other_val)),
     }
 }
@@ -193,6 +205,7 @@ pub fn grep(value: RuleValue, pattern: &str) -> Result<RuleValue> {
         } else {
             vec![]
         })),
+        RuleValue::Null => Ok(RuleValue::List(vec![])),
         other => Err(anyhow!("grep: expected a list or string, got {:?}", other)),
     }
 }
@@ -215,6 +228,7 @@ pub fn reject_grep(value: RuleValue, pattern: &str) -> Result<RuleValue> {
         } else {
             vec![RuleValue::Str(s)]
         })),
+        RuleValue::Null => Ok(RuleValue::List(vec![])),
         other => Err(anyhow!(
             "reject_grep: expected a list or string, got {:?}",
             other
@@ -267,6 +281,7 @@ pub fn conflicts(value: RuleValue) -> Result<RuleValue> {
             }
             Ok(RuleValue::List(out))
         }
+        RuleValue::Null => Ok(RuleValue::List(vec![])),
         other => Err(anyhow!("conflicts: expected a list, got {:?}", other)),
     }
 }
@@ -286,6 +301,11 @@ mod tests {
     #[test]
     fn non_empty_err_on_non_list() {
         assert!(non_empty(sv("x")).is_err());
+    }
+
+    #[test]
+    fn non_empty_null_returns_empty_list() {
+        assert_eq!(non_empty(RuleValue::Null).unwrap(), RuleValue::List(vec![]));
     }
 
     #[test]
@@ -314,6 +334,11 @@ mod tests {
     }
 
     #[test]
+    fn skip_null_returns_empty_list() {
+        assert_eq!(skip(RuleValue::Null, 1).unwrap(), RuleValue::List(vec![]));
+    }
+
+    #[test]
     fn skip_err_on_non_list() {
         assert!(skip(sv("x"), 1).is_err());
     }
@@ -326,6 +351,11 @@ mod tests {
     #[test]
     fn nth_out_of_bounds_returns_null() {
         assert_eq!(nth(list(&["a"]), 5).unwrap(), RuleValue::Null);
+    }
+
+    #[test]
+    fn nth_null_returns_null() {
+        assert_eq!(nth(RuleValue::Null, 0).unwrap(), RuleValue::Null);
     }
 
     #[test]
@@ -386,6 +416,11 @@ mod tests {
     }
 
     #[test]
+    fn join_null_returns_empty_string() {
+        assert_eq!(join(RuleValue::Null, ",").unwrap(), sv(""));
+    }
+
+    #[test]
     fn last_returns_last_element() {
         assert_eq!(last(list(&["a", "b", "c"])).unwrap(), sv("c"));
     }
@@ -425,6 +460,14 @@ mod tests {
     }
 
     #[test]
+    fn group_count_null_returns_empty_list() {
+        assert_eq!(
+            group_count(RuleValue::Null, 0).unwrap(),
+            RuleValue::List(vec![])
+        );
+    }
+
+    #[test]
     fn where_gt_filters_by_first_field() {
         let input = list(&["3 firefox", "1 chromium", "2 vscode"]);
         let result = where_gt(input, 2).unwrap();
@@ -441,6 +484,14 @@ mod tests {
     #[test]
     fn where_gt_err_on_non_list() {
         assert!(where_gt(sv("x"), 1).is_err());
+    }
+
+    #[test]
+    fn where_gt_null_returns_empty_list() {
+        assert_eq!(
+            where_gt(RuleValue::Null, 1).unwrap(),
+            RuleValue::List(vec![])
+        );
     }
 
     #[test]
@@ -469,6 +520,14 @@ mod tests {
     }
 
     #[test]
+    fn intersect_null_returns_empty_list() {
+        assert_eq!(
+            intersect(RuleValue::Null, &["y".to_string()]).unwrap(),
+            RuleValue::List(vec![])
+        );
+    }
+
+    #[test]
     fn reject_in_removes_matching_items() {
         let input = list(&["firefox", "chromium", "vscode"]);
         let other = vec!["chromium".to_string(), "vim".to_string()];
@@ -479,6 +538,14 @@ mod tests {
     #[test]
     fn reject_in_err_on_non_list() {
         assert!(reject_in(sv("x"), &["y".to_string()]).is_err());
+    }
+
+    #[test]
+    fn reject_in_null_input_returns_empty_list() {
+        assert_eq!(
+            reject_in(RuleValue::Null, &["y".to_string()]).unwrap(),
+            RuleValue::List(vec![])
+        );
     }
 
     #[test]
@@ -527,6 +594,14 @@ mod tests {
     #[test]
     fn reject_grep_invalid_pattern_errors() {
         assert!(reject_grep(list(&["x"]), "[invalid").is_err());
+    }
+
+    #[test]
+    fn reject_grep_null_returns_empty_list() {
+        assert_eq!(
+            reject_grep(RuleValue::Null, "error").unwrap(),
+            RuleValue::List(vec![])
+        );
     }
 
     #[test]

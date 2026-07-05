@@ -372,6 +372,22 @@ mod tests {
     }
 
     #[test]
+    fn filter_intersect_null_arg_treats_as_empty_list() {
+        let values = map_of(&[(
+            "input",
+            RuleValue::List(vec![RuleValue::Str("firefox".into())]),
+        )]);
+        let expr = Expression::Pipeline(vec![
+            Expression::Variable("input".into()),
+            Expression::Filter {
+                name: "intersect".into(),
+                args: vec![Expression::Literal(RuleValue::Null)],
+            },
+        ]);
+        assert_eq!(expr.eval(&values).unwrap(), RuleValue::List(vec![]));
+    }
+
+    #[test]
     fn filter_intersect_missing_arg_errors() {
         let expr = Expression::Filter {
             name: "intersect".into(),

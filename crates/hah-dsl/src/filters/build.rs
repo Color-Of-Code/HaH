@@ -89,9 +89,11 @@ impl Filter {
     }
 
     fn require_list_arg<'a>(name: &str, args: &'a [RuleValue]) -> Result<&'a [RuleValue]> {
-        args.first()
-            .and_then(RuleValue::as_list)
-            .ok_or_else(|| anyhow!("{name} requires a list argument"))
+        match args.first() {
+            Some(RuleValue::List(items)) => Ok(items),
+            Some(RuleValue::Null) => Ok(&[]),
+            _ => Err(anyhow!("{name} requires a list argument")),
+        }
     }
 
     fn str_arg(name: &str, args: &[RuleValue]) -> Result<Option<Self>> {
