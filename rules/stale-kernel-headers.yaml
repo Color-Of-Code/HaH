@@ -11,34 +11,28 @@ rules:
           program: uname
           args: ["-r"]
         transform: "$stdout | trim"
-      - name: bootloader_config
-        command:
-          program: cat
-          args: ["/boot/grub/grub.cfg"]
-        transform: "$stdout | lines"
+      - name: bootable
+        file:
+          path: /boot/grub/grub.cfg
+        transform: "$stdout | lines | grep('vmlinuz-[^ ]+') | field(1) | prefix_strip('/boot/vmlinuz-') | suffix_strip('-generic') | unique | regex_escape"
       - name: headers
         pipeline:
-          - [dpkg-query, --show, "--showformat=${Package}\n", "linux-headers-*"]
-        transform: "$stdout | lines | non_empty"
+          - [dpkg-query, -W, "-f=${Package}\n"]
+        transform: "$stdout | lines | grep('^linux-headers-[^ ]+$') | non_empty"
 
     values:
-      bootable_header_packages: "$bootloader_config | grep('vmlinuz-[^ ]+') | prefix_strip('vmlinuz-') | prefix_add('linux-headers-') | sort"
-      stale_headers: "$headers | reject_in($bootable_header_packages) | reject_contains($running) | sort"
-      stale_versions: "$stale_headers | prefix_strip('linux-headers-')"
-      stale_count: "$stale_versions | count"
-      stale_list: "$stale_versions | join(', ')"
-
+      stale_headers: "$headers | reject_grep($bootable) | reject_contains($running) | reject_grep('^linux-headers-generic$') | sort"
     conditions:
-      - info: "$stale_versions"
+      - info: "$stale_headers"
 
     outcome:
       for_each:
-        list: "$stale_versions"
+        list: "$stale_headers"
         as: ver
       id: "stale-kernel-headers-{ver}"
-      title: "Stale kernel header: linux-headers-{ver}"
-      description: "linux-headers-{ver} has no matching linux-image package installed."
+      title: "Stale kernel header: {ver}"
+      description: "{ver} has no matching linux-image package installed."
       remediation:
         description: "Remove stale kernel header packages."
         commands:
-          - "sudo apt autoremove --purge"
+          - "sudo apt autoremove --purge {ver}"

@@ -11,33 +11,29 @@ rules:
           program: uname
           args: ["-r"]
         transform: "$stdout | trim"
-      - name: bootloader_config
-        command:
-          program: cat
-          args: ["/boot/grub/grub.cfg"]
-        transform: "$stdout | lines"
+      - name: bootable
+        file:
+          path: /boot/grub/grub.cfg
+        transform: "$stdout | lines | grep('vmlinuz-[^ ]+') | field(1) | prefix_strip('/boot/vmlinuz-') | prefix_add('linux-image-') | unique | regex_escape"
       - name: installed
         pipeline:
-          - [dpkg-query, --show, "--showformat=${Package}\n", "linux-image-*"]
-        transform: "$stdout | lines | non_empty"
+          - [dpkg-query, -W, "-f=${Package}\n"]
+        transform: "$stdout | lines | grep('^linux-image-[^ ]+$') | non_empty"
 
     values:
-      bootable_kernels: "$bootloader_config | grep('vmlinuz-[^ ]+') | prefix_strip('vmlinuz-') | prefix_add('linux-image-') | sort"
-      unused_kernels: "$installed | reject_in($bootable_kernels) | reject_contains($running) | sort"
-      unused_count: "$unused_kernels | count"
-      unused_list: "$unused_kernels | join(', ')"
+      unused_kernels: "$installed | reject_grep($bootable) | reject_contains($running) | reject_grep('^linux-image-generic$') | sort"
 
     conditions:
       - warning: "$unused_kernels"
 
     outcome:
-      id: unused-kernels
-      title: "{unused_count} unused kernel package(s) installed"
-      description: >
-        These kernel packages are installed but do not match the running kernel
-        and can be safely removed: {unused_list}.
-        They consume space in /boot and can be removed with apt autoremove.
+      for_each:
+        list: "$unused_kernels"
+        as: ver
+      id: "unused-kernels-{ver}"
+      title: "Unused kernel package: {ver}"
+      description: "{ver} is installed but does not match the running kernel and can be removed."
       remediation:
         description: "Remove unused kernels with apt."
         commands:
-          - "sudo apt autoremove --purge"
+          - "sudo apt autoremove --purge {ver}"

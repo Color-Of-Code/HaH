@@ -44,6 +44,7 @@ make setup
 
 - Never suppress a Clippy warning with `#[allow(...)]` unless it is inside a `#[cfg(test)]` block and the suppression is genuinely test-only (e.g. `clippy::unwrap_used`, `clippy::panic`).
 - Rule YAML should stay in the DSL world. Shell pipelines such as `sh -c ...` or other ad-hoc shell glue in rule definitions are a no-go; use the DSL filters and probes instead.
+- Avoid `cat` in rule definitions. When a rule needs file contents, prefer the built-in file trigger (`file: { path: ... }`) and shape the result with the trigger transform instead of invoking `cat`.
 - Never lower or remove the `--fail-under-lines 95` threshold.
 - New public functions must have tests that exercise their main code paths.
 
