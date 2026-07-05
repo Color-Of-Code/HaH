@@ -45,7 +45,7 @@ pub struct RuleSet {
 pub struct Rule {
     /// Stable unique ID used as the check ID.
     pub id: String,
-    /// Human-readable title shown in `hah list-checks` and findings.
+    /// Human-readable title shown in `hah list` and findings.
     pub title: String,
     /// Optional inline guard (can also be referenced via `use.guard`).
     #[serde(default)]

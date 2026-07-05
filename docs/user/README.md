@@ -29,7 +29,7 @@ hah scan --check boot-space
 List all available checks:
 
 ```bash
-hah list-checks
+hah list
 ```
 
 ## Remediation

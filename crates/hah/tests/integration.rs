@@ -10,23 +10,17 @@ fn hah() -> Command {
 
 #[test]
 fn list_checks_exits_0() {
-    let status = hah()
-        .arg("list-checks")
-        .status()
-        .expect("failed to run hah");
+    let status = hah().arg("list").status().expect("failed to run hah");
     assert_eq!(status.code(), Some(0));
 }
 
 #[test]
 fn list_checks_prints_check_ids() {
-    let output = hah()
-        .arg("list-checks")
-        .output()
-        .expect("failed to run hah");
+    let output = hah().arg("list").output().expect("failed to run hah");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
         stdout.contains("boot-space"),
-        "expected 'boot-space' in list-checks output"
+        "expected 'boot-space' in list output"
     );
 }
 

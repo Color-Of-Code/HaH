@@ -27,7 +27,7 @@ pub enum Command {
     },
 
     /// List all registered checks with their IDs
-    ListChecks,
+    List,
 
     /// Validate rule file syntax and structure
     Validate {
@@ -61,8 +61,8 @@ mod tests {
 
     #[test]
     fn parse_list_checks_command() {
-        let cli = parse(&["hah", "list-checks"]);
-        assert!(matches!(cli.command, Command::ListChecks));
+        let cli = parse(&["hah", "list"]);
+        assert!(matches!(cli.command, Command::List));
     }
 
     #[test]

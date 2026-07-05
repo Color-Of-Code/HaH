@@ -39,7 +39,7 @@ denylist:
       reason: "Adobe Flash is end-of-life and a security risk"
 
 # ── Check selection ───────────────────────────────────────────────────────────
-# Disable specific checks by ID. Use `hah list-checks` to see all IDs.
+# Disable specific checks by ID. Use `hah list` to see all IDs.
 disabled_checks:
   - broken-symlinks
 

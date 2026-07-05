@@ -10,11 +10,11 @@ hah <COMMAND>
 
 ### Commands
 
-| Command           | Description                                       |
-| ----------------- | ------------------------------------------------- |
-| `hah scan`        | Run all enabled checks and report findings        |
-| `hah list-checks` | List every registered check with its ID and title |
-| `hah validate`    | Validate rule file syntax without running checks  |
+| Command        | Description                                       |
+| -------------- | ------------------------------------------------- |
+| `hah scan`     | Run all enabled checks and report findings        |
+| `hah list`     | List every registered check with its ID and title |
+| `hah validate` | Validate rule file syntax without running checks  |
 
 ### `hah scan` options
 

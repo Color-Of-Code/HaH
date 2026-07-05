@@ -8,7 +8,7 @@ package management, network configuration, and system drift.
 To browse all available checks with their IDs and descriptions, run:
 
 ```bash
-hah list-checks
+hah list
 ```
 
 This lists every rule loaded from the built-in defaults and any custom

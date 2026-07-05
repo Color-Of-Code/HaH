@@ -48,7 +48,7 @@ pub(crate) fn run_with_config(cli: Cli, config: Config, distro: DistroInfo) -> b
                 .any(|(_, r)| r.findings.iter().any(|f| f.severity == Severity::Critical))
         }
 
-        Command::ListChecks => {
+        Command::List => {
             let checks = registry::all_checks(&config);
             println!("{:<30} TITLE", "ID");
             println!("{}", "-".repeat(70));
@@ -137,7 +137,7 @@ mod tests {
     #[test]
     fn list_checks_returns_false() {
         assert!(!run_with_config(
-            parse(&["hah", "list-checks"]),
+            parse(&["hah", "list"]),
             Config::default(),
             DistroInfo::default(),
         ));
