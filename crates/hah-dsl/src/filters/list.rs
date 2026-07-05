@@ -3,63 +3,55 @@ use anyhow::{Result, anyhow};
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 
-pub fn non_empty(value: RuleValue) -> Result<RuleValue> {
+fn list_items(value: RuleValue) -> Result<Vec<RuleValue>> {
     match value {
-        RuleValue::List(v) => Ok(RuleValue::List(
-            v.into_iter()
-                .filter(|item| !matches!(item, RuleValue::Null))
-                .filter(|item| !matches!(item, RuleValue::Str(s) if s.is_empty()))
-                .collect(),
-        )),
-        RuleValue::Null => Ok(RuleValue::List(vec![])),
-        other => Err(anyhow!("non_empty: expected a list, got {:?}", other)),
+        RuleValue::List(v) => Ok(v),
+        RuleValue::Null => Ok(vec![]),
+        other => Err(anyhow!("expected a list, got {:?}", other)),
     }
+}
+
+pub fn non_empty(value: RuleValue) -> Result<RuleValue> {
+    let items = list_items(value).map_err(|e| anyhow!("non_empty: {e}"))?;
+    Ok(RuleValue::List(
+        items
+            .into_iter()
+            .filter(|item| !matches!(item, RuleValue::Null))
+            .filter(|item| !matches!(item, RuleValue::Str(s) if s.is_empty()))
+            .collect(),
+    ))
 }
 
 pub fn first(value: RuleValue) -> Result<RuleValue> {
-    match value {
-        RuleValue::List(mut v) => Ok(if v.is_empty() {
-            RuleValue::Null
-        } else {
-            v.remove(0)
-        }),
-        RuleValue::Null => Ok(RuleValue::Null),
-        other => Err(anyhow!("first: expected a list, got {:?}", other)),
-    }
+    let mut items = list_items(value).map_err(|e| anyhow!("first: {e}"))?;
+    Ok(if items.is_empty() {
+        RuleValue::Null
+    } else {
+        items.remove(0)
+    })
 }
 
 pub fn last(value: RuleValue) -> Result<RuleValue> {
-    match value {
-        RuleValue::List(mut v) => Ok(if v.is_empty() {
-            RuleValue::Null
-        } else {
-            v.pop().unwrap_or(RuleValue::Null)
-        }),
-        RuleValue::Null => Ok(RuleValue::Null),
-        other => Err(anyhow!("last: expected a list, got {:?}", other)),
-    }
+    let mut items = list_items(value).map_err(|e| anyhow!("last: {e}"))?;
+    Ok(if items.is_empty() {
+        RuleValue::Null
+    } else {
+        items.pop().unwrap_or(RuleValue::Null)
+    })
 }
 
 pub fn skip(value: RuleValue, n: usize) -> Result<RuleValue> {
-    match value {
-        RuleValue::List(mut v) => {
-            if n < v.len() {
-                Ok(RuleValue::List(v.split_off(n)))
-            } else {
-                Ok(RuleValue::List(vec![]))
-            }
-        }
-        RuleValue::Null => Ok(RuleValue::List(vec![])),
-        other => Err(anyhow!("skip: expected a list, got {:?}", other)),
+    let mut items = list_items(value).map_err(|e| anyhow!("skip: {e}"))?;
+    if n < items.len() {
+        Ok(RuleValue::List(items.split_off(n)))
+    } else {
+        Ok(RuleValue::List(vec![]))
     }
 }
 
 pub fn nth(value: RuleValue, n: usize) -> Result<RuleValue> {
-    match value {
-        RuleValue::List(v) => Ok(v.get(n).cloned().unwrap_or(RuleValue::Null)),
-        RuleValue::Null => Ok(RuleValue::Null),
-        other => Err(anyhow!("nth: expected a list, got {:?}", other)),
-    }
+    let items = list_items(value).map_err(|e| anyhow!("nth: {e}"))?;
+    Ok(items.get(n).cloned().unwrap_or(RuleValue::Null))
 }
 
 pub fn count(value: &RuleValue) -> RuleValue {
@@ -71,26 +63,16 @@ pub fn count(value: &RuleValue) -> RuleValue {
 }
 
 pub fn sort(value: RuleValue) -> Result<RuleValue> {
-    match value {
-        RuleValue::List(mut v) => {
-            v.sort_by_key(RuleValue::display);
-            Ok(RuleValue::List(v))
-        }
-        RuleValue::Null => Ok(RuleValue::List(vec![])),
-        other => Err(anyhow!("sort: expected a list, got {:?}", other)),
-    }
+    let mut items = list_items(value).map_err(|e| anyhow!("sort: {e}"))?;
+    items.sort_by_key(RuleValue::display);
+    Ok(RuleValue::List(items))
 }
 
 pub fn unique(value: RuleValue) -> Result<RuleValue> {
-    match value {
-        RuleValue::List(mut v) => {
-            v.sort_by_key(RuleValue::display);
-            v.dedup();
-            Ok(RuleValue::List(v))
-        }
-        RuleValue::Null => Ok(RuleValue::List(vec![])),
-        other => Err(anyhow!("unique: expected a list, got {:?}", other)),
-    }
+    let mut items = list_items(value).map_err(|e| anyhow!("unique: {e}"))?;
+    items.sort_by_key(RuleValue::display);
+    items.dedup();
+    Ok(RuleValue::List(items))
 }
 
 pub fn join(value: RuleValue, sep: &str) -> Result<RuleValue> {
@@ -110,81 +92,66 @@ pub fn join(value: RuleValue, sep: &str) -> Result<RuleValue> {
 /// Group list items by whitespace-field `n`, returning `"count key"` strings
 /// sorted alphabetically by key.
 pub fn group_count(value: RuleValue, n: usize) -> Result<RuleValue> {
-    match value {
-        RuleValue::List(v) => {
-            let mut counts: HashMap<String, i64> = HashMap::new();
-            for item in &v {
-                let key = match item {
-                    RuleValue::Str(s) => s.split_whitespace().nth(n).unwrap_or("").to_string(),
-                    _ => String::new(),
-                };
-                *counts.entry(key).or_default() += 1;
-            }
-            let mut pairs: Vec<_> = counts.into_iter().collect();
-            pairs.sort_by(|a, b| a.0.cmp(&b.0));
-            Ok(RuleValue::List(
-                pairs
-                    .into_iter()
-                    .map(|(key, cnt)| RuleValue::Str(format!("{cnt} {key}")))
-                    .collect(),
-            ))
-        }
-        RuleValue::Null => Ok(RuleValue::List(vec![])),
-        other => Err(anyhow!("group_count: expected a list, got {:?}", other)),
+    let items = list_items(value).map_err(|e| anyhow!("group_count: {e}"))?;
+    let mut counts: HashMap<String, i64> = HashMap::new();
+    for item in &items {
+        let key = match item {
+            RuleValue::Str(s) => s.split_whitespace().nth(n).unwrap_or("").to_string(),
+            _ => String::new(),
+        };
+        *counts.entry(key).or_default() += 1;
     }
+    let mut pairs: Vec<_> = counts.into_iter().collect();
+    pairs.sort_by(|a, b| a.0.cmp(&b.0));
+    Ok(RuleValue::List(
+        pairs
+            .into_iter()
+            .map(|(key, cnt)| RuleValue::Str(format!("{cnt} {key}")))
+            .collect(),
+    ))
 }
 
 /// Keep only items whose first whitespace-field (parsed as integer) exceeds
 /// `threshold`.  Designed to follow `group_count`.
 pub fn where_gt(value: RuleValue, threshold: i64) -> Result<RuleValue> {
-    match value {
-        RuleValue::List(v) => Ok(RuleValue::List(
-            v.into_iter()
-                .filter(|item| match item {
-                    RuleValue::Str(s) => s
-                        .split_whitespace()
-                        .next()
-                        .and_then(|n| n.parse::<i64>().ok())
-                        .is_some_and(|n| n > threshold),
-                    _ => false,
-                })
-                .collect(),
-        )),
-        RuleValue::Null => Ok(RuleValue::List(vec![])),
-        other => Err(anyhow!("where_gt: expected a list, got {:?}", other)),
-    }
+    let items = list_items(value).map_err(|e| anyhow!("where_gt: {e}"))?;
+    Ok(RuleValue::List(
+        items
+            .into_iter()
+            .filter(|item| match item {
+                RuleValue::Str(s) => s
+                    .split_whitespace()
+                    .next()
+                    .and_then(|n| n.parse::<i64>().ok())
+                    .is_some_and(|n| n > threshold),
+                _ => false,
+            })
+            .collect(),
+    ))
 }
 
 /// Set intersection: keep only items whose display form appears in `other`.
 pub fn intersect(value: RuleValue, other: &[String]) -> Result<RuleValue> {
-    match value {
-        RuleValue::List(v) => {
-            let set: HashSet<&str> = other.iter().map(String::as_str).collect();
-            Ok(RuleValue::List(
-                v.into_iter()
-                    .filter(|item| set.contains(item.display().as_str()))
-                    .collect(),
-            ))
-        }
-        RuleValue::Null => Ok(RuleValue::List(vec![])),
-        other_val => Err(anyhow!("intersect: expected a list, got {:?}", other_val)),
-    }
+    let items = list_items(value).map_err(|e| anyhow!("intersect: {e}"))?;
+    let set: HashSet<&str> = other.iter().map(String::as_str).collect();
+    Ok(RuleValue::List(
+        items
+            .into_iter()
+            .filter(|item| set.contains(item.display().as_str()))
+            .collect(),
+    ))
 }
 
 /// Set subtraction: remove items whose display form appears in `other`.
 pub fn reject_in(value: RuleValue, other: &[String]) -> Result<RuleValue> {
-    match value {
-        RuleValue::List(v) => {
-            let set: HashSet<&str> = other.iter().map(String::as_str).collect();
-            Ok(RuleValue::List(
-                v.into_iter()
-                    .filter(|item| !set.contains(item.display().as_str()))
-                    .collect(),
-            ))
-        }
-        RuleValue::Null => Ok(RuleValue::List(vec![])),
-        other_val => Err(anyhow!("reject_in: expected a list, got {:?}", other_val)),
-    }
+    let items = list_items(value).map_err(|e| anyhow!("reject_in: {e}"))?;
+    let set: HashSet<&str> = other.iter().map(String::as_str).collect();
+    Ok(RuleValue::List(
+        items
+            .into_iter()
+            .filter(|item| !set.contains(item.display().as_str()))
+            .collect(),
+    ))
 }
 
 /// Keep only list items (or the string itself) that match `pattern`.
@@ -243,47 +210,42 @@ pub fn reject_grep(value: RuleValue, pattern: &str) -> Result<RuleValue> {
 /// ignored.  Returns one `"<key>: <fileA>=<valA>, <fileB>=<valB>"` string per
 /// key that is assigned at least two *different* values, sorted by key.
 pub fn conflicts(value: RuleValue) -> Result<RuleValue> {
-    match value {
-        RuleValue::List(v) => {
-            let mut seen: HashMap<String, Vec<(String, String)>> = HashMap::new();
-            for item in &v {
-                let line = item.display();
-                let Some((file, rest)) = line.split_once(':') else {
-                    continue;
-                };
-                let content = rest.trim();
-                if content.is_empty() || content.starts_with('#') || content.starts_with(';') {
-                    continue;
-                }
-                if let Some((key, val)) = content.split_once('=') {
-                    seen.entry(key.trim().to_string())
-                        .or_default()
-                        .push((file.trim().to_string(), val.trim().to_string()));
-                }
-            }
-            let mut keys: Vec<&String> = seen.keys().collect();
-            keys.sort();
-            let mut out = Vec::new();
-            for key in keys {
-                let occ = &seen[key];
-                if occ.len() < 2 {
-                    continue;
-                }
-                let first = &occ[0].1;
-                if occ.iter().any(|(_, v)| v != first) {
-                    let detail = occ
-                        .iter()
-                        .map(|(f, val)| format!("{f}={val}"))
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    out.push(RuleValue::Str(format!("{key}: {detail}")));
-                }
-            }
-            Ok(RuleValue::List(out))
+    let items = list_items(value).map_err(|e| anyhow!("conflicts: {e}"))?;
+    let mut seen: HashMap<String, Vec<(String, String)>> = HashMap::new();
+    for item in &items {
+        let line = item.display();
+        let Some((file, rest)) = line.split_once(':') else {
+            continue;
+        };
+        let content = rest.trim();
+        if content.is_empty() || content.starts_with('#') || content.starts_with(';') {
+            continue;
         }
-        RuleValue::Null => Ok(RuleValue::List(vec![])),
-        other => Err(anyhow!("conflicts: expected a list, got {:?}", other)),
+        if let Some((key, val)) = content.split_once('=') {
+            seen.entry(key.trim().to_string())
+                .or_default()
+                .push((file.trim().to_string(), val.trim().to_string()));
+        }
     }
+    let mut keys: Vec<&String> = seen.keys().collect();
+    keys.sort();
+    let mut out = Vec::new();
+    for key in keys {
+        let occ = &seen[key];
+        if occ.len() < 2 {
+            continue;
+        }
+        let first = &occ[0].1;
+        if occ.iter().any(|(_, v)| v != first) {
+            let detail = occ
+                .iter()
+                .map(|(f, val)| format!("{f}={val}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            out.push(RuleValue::Str(format!("{key}: {detail}")));
+        }
+    }
+    Ok(RuleValue::List(out))
 }
 
 #[cfg(test)]
@@ -291,6 +253,12 @@ pub fn conflicts(value: RuleValue) -> Result<RuleValue> {
 mod tests {
     use super::*;
     use crate::testutil::{list, sv};
+
+    #[test]
+    fn list_items_treats_null_as_empty_list() {
+        let result = list_items(RuleValue::Null).unwrap();
+        assert_eq!(result, vec![]);
+    }
 
     #[test]
     fn non_empty_removes_null_and_empty_strings() {
