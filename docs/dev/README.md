@@ -7,16 +7,16 @@ Welcome to the HaH development documentation. This section covers the internals,
 HaH is organized as a Cargo workspace:
 
 - `hah`: The main CLI binary.
-- `hah-core`: Core data models, traits, and common functionality.
-- `hah-dsl`: YAML rule engine, pipeline evaluator, and capability bridge.
-- `hah-caps`: Capability implementations — system queries (apt, files, kernel, journal, etc.).
+- `hah-core`: Core data models, traits, command runner, execution policy, and common functionality.
+- `hah-dsl`: YAML rule engine and pipeline evaluator.
 - `hah-utils`: Low-level shared utilities and library facades.
 
 ## Key Concepts
 
 - **Checks**: Units of diagnostic logic that implement the `Check` trait.
 - **Findings**: Results returned by checks, containing a severity and remediation suggestions.
-- **Capabilities**: Data sources (like `apt`, `files`, `sysctl`) implemented in `hah-caps` that rules can query via capability triggers.
+- **Triggers**: How a rule gathers data — a `command`, a declarative `pipeline` of commands, a `file` read, or a built-in `probe`.
+- **Command policy**: An allowlist of programs (regexes) enforced by `PolicyRunner`; non-allowlisted commands are skipped unless approved in `--ask` mode.
 
 ## Documentation Index
 

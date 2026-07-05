@@ -2,13 +2,12 @@
 
 ## Crate Layout
 
-HaH is a Cargo workspace with four library crates and one binary:
+HaH is a Cargo workspace with three library crates and one binary:
 
 ```
 hah          (binary)   CLI entry point, check registry, argument parsing
-hah-core     (library)  Data model, Check trait, Config, output renderers, distro detection
+hah-core     (library)  Data model, Check trait, Config, command runner + policy, output renderers, distro detection
 hah-dsl      (library)  YAML rule engine: pipeline evaluator, rule loader
-hah-caps     (library)  Capability implementations: system queries (apt, files, kernel, logs, …)
 hah-utils    (library)  Low-level shared utilities and library facades
 ```
 
@@ -19,13 +18,13 @@ hah
  ├── hah-core
  └── hah-dsl
       ├── hah-core
-      ├── hah-caps ── hah-core, hah-utils
       └── hah-utils
 ```
 
 All checks are declarative YAML rules. The DSL crate handles rule parsing and
-pipeline evaluation; `hah-caps` provides the data-gathering capabilities that
-rules reference via `capability:` triggers.
+pipeline evaluation; rules gather data by running external commands via
+`command` and `pipeline` triggers, which are executed through `hah-core`'s
+policy-enforcing [`CommandRunner`].
 
 ---
 
@@ -39,9 +38,10 @@ rules reference via `capability:` triggers.
 | `Severity` | `model.rs` | `Info`, `Warning`, or `Critical` |
 | `Remediation` | `model.rs` | Description and suggested shell commands |
 | `Context` | `check.rs` | Passed to every check: `Config`, `DistroInfo`, `CommandRunner`, `verbose` |
-| `Config` | `config.rs` | Deserialised from YAML; thresholds, allowlist, denylist, check selection, rule dirs |
+| `Config` | `config.rs` | Deserialised from YAML; thresholds, allowlist, denylist, command allowlist, check selection, rule dirs |
 | `DistroInfo` | `distro.rs` | Parsed from `/etc/os-release`; `is_debian_family()` helper |
-| `CommandRunner` | `runner.rs` | Trait for executing shell commands for data collection; mocked in tests |
+| `CommandRunner` | `runner.rs` | Trait for executing commands (`run`, `run_stdin`); mocked in tests |
+| `PolicyRunner` | `policy.rs` | `CommandRunner` decorator enforcing the command allowlist and `--ask` prompts |
 
 ### RuleValue (hah-dsl)
 
@@ -65,16 +65,15 @@ All checks are YAML rules. Drop a `.yaml` file in `rules/` (for the default ship
 any directory listed in `rule_dirs` in your config. See [docs/dsl.md](dsl.md) for the full
 language reference.
 
-For complex data-gathering logic, add a capability function in the `hah-caps`
-crate (one file per module, e.g. `crates/hah-caps/src/kernel.rs`), register a
-`CapabilitySpec` variant in `hah-dsl/src/rule/model.rs`, wire it in
-`hah-dsl/src/caps_bridge.rs`, and reference it from the YAML rule via
-`capability: { type: my_capability }`.
+Rules gather data with `command` and `pipeline` triggers (external programs run
+through the policy-enforced [`CommandRunner`]) and shape it with pipeline
+filters. Non-trivial transformations that cannot be expressed with a single
+command are handled by chaining argv stages in a `pipeline:` and post-processing
+with filters such as `grep`, `conflicts`, or `to_bytes`.
 
-If the capability needs a structured sub-type that is also deserialized from YAML
-(like `LogSource` for `log_scan`), define the type in `hah-caps` and re-export it
-from there so `hah-dsl` can use it without duplication — `hah-dsl` already depends
-on `hah-caps`.
+If a program you need is not in the default command allowlist, add its regex to
+`commands.allow` in your config (see [docs/config.md](config.md)); otherwise the
+check is reported as skipped.
 
 ---
 

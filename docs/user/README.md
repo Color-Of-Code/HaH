@@ -32,6 +32,26 @@ List all available checks:
 hah list
 ```
 
+## Controlling what runs
+
+Checks gather data by running read-only system commands (for example `find`,
+`dpkg-query`, `journalctl`). Only programs on the **command allowlist** are
+permitted; any check needing a command that is not allowlisted is reported as
+`SKIPPED`. See the [Configuration Guide](../config.md) to customise the
+allowlist.
+
+Preview exactly which commands each check would run, without executing anything:
+
+```bash
+hah scan --dry-run
+```
+
+Approve each non-allowlisted command interactively before it runs:
+
+```bash
+hah scan --ask
+```
+
 ## Remediation
 
 When HaH finds an issue, it provides a "Remediation" section. This contains suggestions on how to fix the problem.

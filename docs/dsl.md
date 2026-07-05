@@ -1,9 +1,9 @@
 # HaH DSL — Declarative Rule Language
 
 Rules let you define checks in YAML without writing Rust. Rust provides reusable primitives
-(capabilities in `hah-caps`, parsers and pipeline filters in `hah-dsl`); YAML composes them
-into policy. Use the DSL for straightforward command/probe checks and for wiring up built-in
-capabilities.
+(the parsers, pipeline filters, and policy-enforced command runner in `hah-core`/`hah-dsl`);
+YAML composes them into policy. A rule gathers data by running commands or command
+pipelines and shapes the output with pipeline filters — all declared in YAML.
 
 ---
 
@@ -93,73 +93,45 @@ triggers:
       path: /etc/initramfs-tools/initramfs.conf
 ```
 
-### Capability trigger
+### Pipeline trigger
 
-Call a Rust-backed capability that returns a typed `RuleValue`.
+Run a **declarative command pipeline**: an array of `argv` stages that HaH runs
+in-process, feeding each stage's stdout into the next stage's stdin. The final
+stage's stdout becomes the trigger value. Shape the result with the
+[transformation pipeline](#transformation-pipeline).
 
 ```yaml
 triggers:
+  - name: broken
+    pipeline:
+      - [find, /etc, /usr/lib, /var/lib, -xtype, l]
+    transform: "$stdout | lines | non_empty"
+
   - name: conflicts
-    capability:
-      type: sysctl_conflicts
-      paths:
-        - /etc/sysctl.d
-        - /usr/lib/sysctl.d
+    pipeline:
+      - [grep, -rHs, "=", /usr/lib/sysctl.d, /etc/sysctl.d, /run/sysctl.d]
+    transform: "$stdout | lines | conflicts"
 ```
 
-Available capabilities:
-
-| Capability | Returns | Description |
-| ---------- | ------- | ----------- |
-| `journal_usage` | `Int(mb)` | Total systemd journal disk usage |
-| `old_files` | `List(paths)` | Files older than `older_than_days` in the given directories |
-| `broken_symlinks` | `List(paths)` | Broken symlinks in the given directories |
-| `sysctl_conflicts` | `List(descriptions)` | Conflicting sysctl key assignments across `sysctl.d` files |
-| `kernel_inventory` | `List(pkgs)` | Installed kernel packages (running kernel + all candidates) |
-| `stale_kernel_headers` | `List(pkgs)` | `linux-headers-*` packages with no matching `linux-image-*` |
-| `large_initramfs` | `List(entries)` | Initramfs images exceeding `threshold_mb` |
-| `legacy_apt_sources` | `List(paths)` | Files using legacy one-line `deb` format |
-| `legacy_network_interfaces` | `Str(status)` | `/etc/network/interfaces` overlap state |
-| `installed_denylist` | `List(entries)` | Installed packages matching the config denylist |
-| `log_scan` | `List(lines)` | Lines from a file or command that match any of the given regex patterns |
-
-#### `log_scan` sources
-
-`log_scan` requires a `source:` block that selects how to obtain log lines:
+Each stage is a plain `argv` array — **no shell** is involved, so globs and
+redirections are not expanded; `find`/`grep` do their own matching. Multiple
+stages pipe together just like a shell `|`:
 
 ```yaml
-# Read from a file.  Use `last_bytes` to tail large files.
-triggers:
-  - name: syslog_errors
-    capability:
-      type: log_scan
-      source:
-        file: /var/log/syslog
-        last_bytes: 1048576   # optional: only read the last 1 MB
-      patterns:
-        - '(?i)\bfatal\b'
-        - '(?i)\bcritical\b'
-
-# Run a command and scan its stdout.
-  - name: dmesg_errors
-    capability:
-      type: log_scan
-      source:
-        command: [dmesg, --level=emerg,alert,crit,err]
-      patterns:
-        - '(?i)\berror\b'
+pipeline:
+  - [dpkg-query, --show, "--showformat=${Package}\n", "linux-image-*"]
+  - [sort]
 ```
 
-Both source types accept a `patterns:` list of Rust regular expressions.
-Empty `patterns` returns **all** lines.  Pair two `log_scan` triggers with
-different patterns and different condition severities to separate critical and
-warning findings entirely in YAML (no Rust changes needed):
+Every stage's program is checked against the [command allowlist](config.md). If
+a program is not permitted (and not approved in `--ask` mode), the check is
+reported as **skipped** rather than run.
 
-```yaml
-conditions:
-  - critical: "$dmesg_critical"
-  - warning:  "$dmesg_warnings"
-```
+> Migrating from log scanning: a file tail plus regex filtering is expressed as
+> `pipeline: [[tail, -c, "1048576", /var/log/syslog]]` followed by
+> `transform: "$stdout | lines | grep('(?i)error')"`. Pair two such triggers
+> with different patterns and condition severities to separate critical and
+> warning findings entirely in YAML.
 
 ---
 
@@ -186,12 +158,14 @@ condition operands.
 | `last` | Take the last item of a list |
 | `nth(n)` | Take the _n_-th item (0-based) |
 | `number` | Parse a string as an integer or float |
+| `to_bytes` | Parse a human size (`600.0M`, `1.5G`, `512K`) into an integer byte count |
 | `field(n)` | Take the _n_-th whitespace-separated field from a string |
 | `prefix_strip(p)` | Remove a leading prefix _p_ from each string in a list |
 | `starts_with(p)` | Keep only list items that start with _p_ |
 | `contains(v)` | Check whether a string or list contains substring _v_ (returns `Bool`) |
 | `icontains(v)` | Case-insensitive version of `contains`; on a list, keeps matching items |
 | `reject_contains(v)` | Drop list items that contain substring _v_ |
+| `conflicts` | From `grep -rH` `file:key = value` lines, report keys with conflicting values across files |
 | `join(sep)` | Join a list of strings into one string with separator _sep_ |
 | `default(v)` | Return _v_ if the current value is `Null` |
 | `count` | Return the number of items in a list as an `Int` |
@@ -401,23 +375,27 @@ See [`rules/`](../rules/) for the default rule set shipped with HaH:
 | `autoremovable.yaml` | Command trigger, `non_empty`, list pipeline |
 | `residual-config.yaml` | `starts_with` / `prefix_strip`, block reuse |
 | `legacy-ntp.yaml` | Multi-probe rule, `all` / `any` conditions |
-| `ntp-conflict.yaml` | Shell command trigger, `non_empty`, `count` |
+| `ntp-conflict.yaml` | Pipeline trigger (`systemctl is-active`), `grep`, `count` |
 | `snap-apt-duplicate.yaml` | `intersect`, `reject_in`, `for_each` multi-finding |
 | `resolved-config.yaml` | `symlink_target` probe, `contains` condition |
-| `old-crash-dumps.yaml` | `old_files` capability, `for_each` per-item findings |
-| `journal-size.yaml` | `journal_usage` capability |
-| `sysctl-ordering.yaml` | `sysctl_conflicts` capability |
-| `unused-kernels.yaml` | `kernel_inventory` capability, `reject_contains` |
-| `broken-symlinks.yaml` | `broken_symlinks` capability |
+| `old-crash-dumps.yaml` | `find` pipeline, `for_each` per-item findings |
+| `journal-size.yaml` | `journalctl` pipeline, `field` / `to_bytes` / `bytes_to_mb` |
+| `sysctl-ordering.yaml` | `grep -rH` pipeline, `conflicts` aggregation filter |
+| `unused-kernels.yaml` | `dpkg-query` pipeline, `reject_contains` against `uname` |
+| `broken-symlinks.yaml` | `find -xtype l` pipeline |
+| `initramfs-size.yaml` | `find -size` pipeline, `for_each` per-item findings |
+| `legacy-apt-sources.yaml` | `grep -rl` pipeline, `for_each` |
+| `user-denylist.yaml` | `dpkg-query` pipeline, `intersect` with config denylist |
+| `legacy-network-interfaces.yaml` | Pipeline + probe decomposition, nested `all`/`any` |
 | `initramfs-compression.yaml` | File trigger, `require_files` guard, `starts_with` |
 | `dkms-status.yaml` | `icontains` filter, `require_commands` guard |
 | `snap-health.yaml` | `group_count`, `where_gt`, aggregation pattern |
 | `apt-key.yaml` | `file_size` probe, `numeric_threshold` |
 | `dpkg-state.yaml` | Simple command + `non_empty` condition |
 | `legacy-dhcp-client.yaml` | Multi-probe, `all`/`any` nested conditions |
-| `dmesg-errors.yaml` | `log_scan` with command source, two-severity pattern split |
-| `syslog-errors.yaml` | `log_scan` with file source, `last_bytes` tail |
-| `kernel-log-errors.yaml` | `log_scan` file source, `require_files` guard |
+| `dmesg-errors.yaml` | `dmesg` pipeline + `grep`, two-severity split |
+| `syslog-errors.yaml` | `tail -c` pipeline + `grep` |
+| `kernel-log-errors.yaml` | `tail -c` pipeline + `grep`, `require_files` guard |
 
 ---
 

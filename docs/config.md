@@ -38,6 +38,24 @@ denylist:
     - name: flashplugin-installer
       reason: "Adobe Flash is end-of-life and a security risk"
 
+# ── Command allowlist ─────────────────────────────────────────────────────────
+# Rules gather data by running external commands (see the DSL `pipeline` and
+# `command` triggers).  Only programs whose name matches one of these regexes
+# are permitted to run; any check that needs a non-allowlisted command is
+# reported as SKIPPED instead of running.
+#
+# When this list is omitted, a built-in default set covering the read-only
+# tools the shipped rules need is used (find, dpkg-query, journalctl, grep,
+# tail, ls, systemctl, uname, dmesg, df, dkms, dpkg, apt-get, snap).
+#
+# Providing your own list REPLACES the defaults, so include every program you
+# need.  Use `hah scan --dry-run` to preview the exact commands each check runs.
+commands:
+  allow:
+    - '^find$'
+    - '^grep$'
+    - '^journalctl$'
+
 # ── Check selection ───────────────────────────────────────────────────────────
 # Disable specific checks by ID. Use `hah list` to see all IDs.
 disabled_checks:
