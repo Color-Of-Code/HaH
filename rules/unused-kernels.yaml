@@ -11,13 +11,19 @@ rules:
           program: uname
           args: ["-r"]
         transform: "$stdout | trim"
+      - name: bootloader_config
+        command:
+          program: cat
+          args: ["/boot/grub/grub.cfg"]
+        transform: "$stdout | lines"
       - name: installed
         pipeline:
           - [dpkg-query, --show, "--showformat=${Package}\n", "linux-image-*"]
         transform: "$stdout | lines | non_empty"
 
     values:
-      unused_kernels: "$installed | reject_contains($running) | sort"
+      bootable_kernels: "$bootloader_config | grep('vmlinuz-[^ ]+') | prefix_strip('vmlinuz-') | prefix_strip('linux-image-') | default('') | grep('^[0-9]') | sort"
+      unused_kernels: "$installed | reject_in($bootable_kernels) | reject_contains($running) | sort"
       unused_count: "$unused_kernels | count"
       unused_list: "$unused_kernels | join(', ')"
 

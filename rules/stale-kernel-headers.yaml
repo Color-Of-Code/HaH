@@ -11,13 +11,19 @@ rules:
           program: uname
           args: ["-r"]
         transform: "$stdout | trim"
+      - name: bootloader_config
+        command:
+          program: cat
+          args: ["/boot/grub/grub.cfg"]
+        transform: "$stdout | lines"
       - name: headers
         pipeline:
           - [dpkg-query, --show, "--showformat=${Package}\n", "linux-headers-*"]
         transform: "$stdout | lines | non_empty"
 
     values:
-      stale_headers: "$headers | reject_contains($running) | sort"
+      bootable_header_packages: "$bootloader_config | grep('vmlinuz-[^ ]+') | prefix_strip('vmlinuz-') | prefix_strip('linux-image-') | default('') | grep('^[0-9]') | sort"
+      stale_headers: "$headers | reject_in($bootable_header_packages) | reject_contains($running) | sort"
       stale_versions: "$stale_headers | prefix_strip('linux-headers-')"
       stale_count: "$stale_versions | count"
       stale_list: "$stale_versions | join(', ')"
