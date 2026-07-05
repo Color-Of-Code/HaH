@@ -10,6 +10,7 @@ workspace = true
 hah-core = { path = "../hah-core" }
 hah-utils = { path = "../hah-utils" }
 anyhow = "1"
+indexmap = { version = "2", features = ["serde"] }
 regex = "1"
 serde = { version = "1", features = ["derive"] }
 winnow = "1.0.3"

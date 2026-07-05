@@ -4,6 +4,7 @@
 
 use std::collections::HashMap;
 
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
 use hah_core::model::Severity;
@@ -54,8 +55,11 @@ pub struct Rule {
     #[serde(default)]
     pub triggers: Vec<RuleTrigger>,
     /// Named derived values computed as pipeline expressions over trigger outputs.
+    ///
+    /// Order-preserving: values are evaluated in declaration order, so a later
+    /// entry may reference an earlier one (e.g. `unused_count: "$unused_kernels | count"`).
     #[serde(default)]
-    pub values: HashMap<String, String>,
+    pub values: IndexMap<String, String>,
     /// Conditions that, when true, produce a finding.
     #[serde(default)]
     pub conditions: Vec<RuleCondition>,
