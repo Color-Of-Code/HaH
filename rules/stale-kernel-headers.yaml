@@ -6,19 +6,19 @@ rules:
       distro_family: debian
 
     triggers:
+      - name: running
+        command:
+          program: uname
+          args: ["-r"]
+        transform: "$stdout | trim"
       - name: headers
         pipeline:
           - [dpkg-query, --show, "--showformat=${Package}\n", "linux-headers-*"]
         transform: "$stdout | lines | non_empty"
-      - name: images
-        pipeline:
-          - [dpkg-query, --show, "--showformat=${Package}\n", "linux-image-*"]
-        transform: "$stdout | lines | non_empty"
 
     values:
-      header_versions: "$headers | prefix_strip('linux-headers-') | grep('^[0-9]')"
-      image_versions: "$images | prefix_strip('linux-image-')"
-      stale_versions: "$header_versions | reject_in($image_versions) | sort"
+      stale_headers: "$headers | reject_contains($running) | sort"
+      stale_versions: "$stale_headers | prefix_strip('linux-headers-')"
       stale_count: "$stale_versions | count"
       stale_list: "$stale_versions | join(', ')"
 
