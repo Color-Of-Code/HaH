@@ -21,10 +21,10 @@ rules:
       for_each:
         list: "$denied"
         as: entry
-      id: "user-denylist-{{ entry }}"
-      title: "Denylisted package installed: {{ entry }}"
+      id: "user-denylist-{entry}"
+      title: "Denylisted package installed: {entry}"
       description: >-
-        A package from the configured denylist is installed: {{ entry }}.
+        A package from the configured denylist is installed: {entry}.
       remediation:
         description: "Remove the denylisted package."
         commands:
