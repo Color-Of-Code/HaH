@@ -9,16 +9,10 @@
 //!
 //! | Module   | Contents |
 //! |----------|----------|
-//! | [`fs`]   | Filesystem helpers: `sanitize_id`, broken-symlink walk, old-file scan |
 //! | [`json`] | JSON serialisation — pretty-print structured data |
 //! | [`paths`]| Platform-specific user configuration directory |
-//! | [`size`] | Human-readable byte-size parsing |
-//! | [`sysctl`] | Pure sysctl conflict-detection algorithm |
 //! | [`yaml`] | YAML parsing and serialisation |
 
-pub mod fs;
 pub mod json;
 pub mod paths;
-pub mod size;
-pub mod sysctl;
 pub mod yaml;
