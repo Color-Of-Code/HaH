@@ -7,13 +7,33 @@ rules:
         - /etc/network/interfaces
 
     triggers:
-      - name: net_status
-        capability:
-          type: legacy_network_interfaces
+      - name: iface_lines
+        pipeline:
+          - [grep, -Es, "^(auto|iface) ", /etc/network/interfaces]
+        transform: "$stdout | lines | reject_grep(' lo\\b')"
+      - name: netplan_files
+        pipeline:
+          - [ls, -A, /etc/netplan]
+        transform: "$stdout | lines | non_empty"
+      - name: nm_active
+        probe:
+          type: service_active
+          name: NetworkManager
+
+    values:
+      non_lo_count: "$iface_lines | count"
+      netplan_count: "$netplan_files | count"
 
     conditions:
-      - warning: "$net_status =~ '^overlap:'"
-      - info: "$net_status =~ '^legacy:'"
+      - all:
+          - warning: "$non_lo_count > 0"
+          - any:
+              - warning: "$netplan_count > 0"
+              - warning: "$nm_active == true"
+      - all:
+          - info: "$non_lo_count > 0"
+          - info: "$netplan_count == 0"
+          - info: "$nm_active == false"
 
     outcome:
       id: legacy-network-interfaces

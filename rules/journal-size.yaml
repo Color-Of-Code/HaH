@@ -8,8 +8,9 @@ rules:
 
     triggers:
       - name: journal_mb
-        capability:
-          type: journal_usage
+        pipeline:
+          - [journalctl, --disk-usage]
+        transform: "$stdout | field(6) | to_bytes | bytes_to_mb"
 
     values:
       threshold_mb: "$config.journal_size_mb | default('500')"

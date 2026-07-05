@@ -5,20 +5,13 @@ rules:
       require_commands: [dmesg]
     triggers:
       - name: dmesg_critical
-        capability:
-          type: log_scan
-          source:
-            command: [dmesg, --level=emerg,alert,crit,err]
-          patterns:
-            - '(?i)\b(fatal|bug:|oops|panic|call trace|kernel BUG)\b'
-            - '(?i)\berror\b'
+        pipeline:
+          - [dmesg, --level=emerg,alert,crit,err]
+        transform: "$stdout | lines | grep('(?i)(fatal|bug:|oops|panic|call trace|kernel BUG|error)')"
       - name: dmesg_warnings
-        capability:
-          type: log_scan
-          source:
-            command: [dmesg, --level=warn]
-          patterns:
-            - '(?i)\bwarn(ing)?\b'
+        pipeline:
+          - [dmesg, --level=warn]
+        transform: "$stdout | lines | grep('(?i)warn(ing)?')"
     values:
       critical_count: "$dmesg_critical | count"
       warning_count: "$dmesg_warnings | count"

@@ -4,9 +4,9 @@ rules:
 
     triggers:
       - name: conflicts
-        capability:
-          type: sysctl_conflicts
-          paths: []
+        pipeline:
+          - [grep, -rHs, "=", /usr/lib/sysctl.d, /etc/sysctl.d, /run/sysctl.d]
+        transform: "$stdout | lines | conflicts"
 
     values:
       conflict_count: "$conflicts | count"

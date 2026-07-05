@@ -5,23 +5,13 @@ rules:
       require_files: [/var/log/kern.log]
     triggers:
       - name: kern_critical
-        capability:
-          type: log_scan
-          source:
-            file: /var/log/kern.log
-            last_bytes: 524288    # scan last 512 KB
-          patterns:
-            - '(?i)\b(fatal|panic|oops|bug:|call trace)\b'
-            - ' (crit|emerg|alert|err): '
+        pipeline:
+          - [tail, -c, "524288", /var/log/kern.log]
+        transform: "$stdout | lines | grep('(?i)(fatal|panic|oops|bug:|call trace)')"
       - name: kern_warnings
-        capability:
-          type: log_scan
-          source:
-            file: /var/log/kern.log
-            last_bytes: 524288
-          patterns:
-            - ' warn(ing)?: '
-            - '(?i)\bwarn(ing)?\b'
+        pipeline:
+          - [tail, -c, "524288", /var/log/kern.log]
+        transform: "$stdout | lines | grep('(?i)warn(ing)?')"
     values:
       critical_count: "$kern_critical | count"
       warning_count: "$kern_warnings | count"

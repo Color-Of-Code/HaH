@@ -6,9 +6,13 @@ rules:
       distro_family: debian
 
     triggers:
-      - name: denied
-        capability:
-          type: installed_denylist
+      - name: installed
+        pipeline:
+          - [dpkg-query, -W, "-f=${Package}\n"]
+        transform: "$stdout | lines | non_empty"
+
+    values:
+      denied: "$installed | intersect($config.denylist.packages) | sort"
 
     conditions:
       - warning: "$denied"

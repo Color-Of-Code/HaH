@@ -5,23 +5,13 @@ rules:
       require_files: [/var/log/syslog]
     triggers:
       - name: syslog_critical
-        capability:
-          type: log_scan
-          source:
-            file: /var/log/syslog
-            last_bytes: 1048576   # scan last 1 MB
-          patterns:
-            - '(?i)\b(fatal|critical|emerg|alert)\b'
-            - ' (crit|emerg|alert): '
+        pipeline:
+          - [tail, -c, "1048576", /var/log/syslog]
+        transform: "$stdout | lines | grep('(?i)(fatal|critical|emerg|alert)')"
       - name: syslog_errors
-        capability:
-          type: log_scan
-          source:
-            file: /var/log/syslog
-            last_bytes: 1048576
-          patterns:
-            - ' (err|error): '
-            - '(?i)\berror\b'
+        pipeline:
+          - [tail, -c, "1048576", /var/log/syslog]
+        transform: "$stdout | lines | grep('(?i)error')"
     values:
       critical_count: "$syslog_critical | count"
       error_count: "$syslog_errors | count"

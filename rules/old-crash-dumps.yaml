@@ -3,10 +3,9 @@ rules:
     title: Old crash dumps and core files
     triggers:
       - name: old_files
-        capability:
-          type: old_files
-          paths: []
-          older_than_days: 30
+        pipeline:
+          - [find, /var/crash, /var/lib/systemd/coredump, -mtime, "+30", -type, f]
+        transform: "$stdout | lines | non_empty"
     conditions:
       - info: "$old_files"
     outcome:

@@ -6,21 +6,32 @@ rules:
       distro_family: debian
 
     triggers:
-      - name: stale_headers
-        capability:
-          type: stale_kernel_headers
+      - name: headers
+        pipeline:
+          - [dpkg-query, --show, "--showformat=${Package}\n", "linux-headers-*"]
+        transform: "$stdout | lines | non_empty"
+      - name: images
+        pipeline:
+          - [dpkg-query, --show, "--showformat=${Package}\n", "linux-image-*"]
+        transform: "$stdout | lines | non_empty"
 
     values:
-      stale_count: "$stale_headers | count"
-      stale_list: "$stale_headers | join(', ')"
+      header_versions: "$headers | prefix_strip('linux-headers-') | grep('^[0-9]')"
+      image_versions: "$images | prefix_strip('linux-image-')"
+      stale_versions: "$header_versions | reject_in($image_versions) | sort"
+      stale_count: "$stale_versions | count"
+      stale_list: "$stale_versions | join(', ')"
 
     conditions:
-      - info: "$stale_headers"
+      - info: "$stale_versions"
 
     outcome:
-      id: stale-kernel-headers
-      title: "{stale_count} stale kernel header package(s)"
-      description: "Header packages with no matching kernel: {stale_list}."
+      for_each:
+        list: "$stale_versions"
+        as: ver
+      id: "stale-kernel-headers-{ver}"
+      title: "Stale kernel header: linux-headers-{ver}"
+      description: "linux-headers-{ver} has no matching linux-image package installed."
       remediation:
         description: "Remove stale kernel header packages."
         commands:

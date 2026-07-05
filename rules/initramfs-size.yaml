@@ -3,9 +3,9 @@ rules:
     title: Oversized initramfs images
     triggers:
       - name: large_images
-        capability:
-          type: large_initramfs
-          threshold_mb: 100
+        pipeline:
+          - [find, /boot, "(", -name, "initrd.img-*", -o, -name, "initramfs-*", ")", -size, "+100M", -printf, "%f\n"]
+        transform: "$stdout | lines | non_empty"
     conditions:
       - warning: "$large_images"
     outcome:
@@ -13,9 +13,9 @@ rules:
         list: "$large_images"
         as: entry
       id: "initramfs-large-{entry}"
-      title: "Oversized initramfs: {entry} MB"
+      title: "Oversized initramfs: {entry}"
       description: >-
-        initramfs image {entry} exceeds the threshold.
+        initramfs image {entry} exceeds 100 MB.
         Large images slow boot and consume /boot space.
       remediation:
         description: Regenerate initramfs images.

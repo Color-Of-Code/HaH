@@ -4,9 +4,9 @@ rules:
 
     triggers:
       - name: broken
-        capability:
-          type: broken_symlinks
-          paths: []
+        pipeline:
+          - [find, /etc, /usr/lib, /var/lib, -xtype, l]
+        transform: "$stdout | lines | non_empty"
 
     values:
       broken_count: "$broken | count"

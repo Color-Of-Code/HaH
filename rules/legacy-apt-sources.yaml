@@ -7,8 +7,9 @@ rules:
 
     triggers:
       - name: legacy_files
-        capability:
-          type: legacy_apt_sources
+        pipeline:
+          - [grep, -rlsE, "--include=*.list", "^deb(-src)? ", /etc/apt/sources.list, /etc/apt/sources.list.d]
+        transform: "$stdout | lines | non_empty"
 
     conditions:
       - info: "$legacy_files"

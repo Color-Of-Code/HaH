@@ -8,22 +8,22 @@ rules:
 
     triggers:
       - name: active_ntp
-        command:
-          program: sh
-          args: ["-c", "for s in ntp chrony openntpd systemd-timesyncd; do systemctl is-active --quiet \"$s\" 2>/dev/null && printf '%s\\n' \"$s\"; done; true"]
+        pipeline:
+          - [systemctl, is-active, ntp, chrony, openntpd, systemd-timesyncd]
+        transform: "$stdout | lines | grep('^active$')"
 
     values:
-      ntp_count: "$active_ntp | lines | non_empty | count"
-      ntp_list: "$active_ntp | lines | non_empty | join(', ')"
+      ntp_count: "$active_ntp | count"
     conditions:
       - warning: "$ntp_count > 1"
     outcome:
       id: ntp-conflict
-      title: "Multiple NTP services active: {ntp_list}"
+      title: "Multiple NTP services active ({ntp_count})"
       description: >-
-        The following time-sync services are all active: {ntp_list}.
-        Competing daemons can fight over the system clock and cause
-        time jumps, log timestamp corruption, or TLS certificate errors.
+        More than one time-sync service (of ntp, chrony, openntpd,
+        systemd-timesyncd) is active. Competing daemons can fight over the
+        system clock and cause time jumps, log timestamp corruption, or TLS
+        certificate errors.
       remediation:
         description: "Disable all but one NTP service (chrony is recommended)."
         commands:
