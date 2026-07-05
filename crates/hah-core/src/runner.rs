@@ -1,4 +1,7 @@
-use std::{io, process::Command};
+use std::{
+    io::{self, Write},
+    process::{Command, Stdio},
+};
 
 /// Output captured from a [`CommandRunner::run`] call.
 #[derive(Clone)]
@@ -16,7 +19,17 @@ pub struct CommandOutput {
 /// any real process.
 #[cfg_attr(any(test, feature = "mock"), mockall::automock)]
 pub trait CommandRunner: Send + Sync {
+    /// Run `program` with `args`, capturing its output.
     fn run<'a>(&self, program: &'a str, args: &'a [&'a str]) -> io::Result<CommandOutput>;
+
+    /// Run `program` with `args`, feeding `stdin` to the process' standard
+    /// input.  Used to chain declarative command pipelines.
+    fn run_stdin<'a>(
+        &self,
+        program: &'a str,
+        args: &'a [&'a str],
+        stdin: &'a [u8],
+    ) -> io::Result<CommandOutput>;
 }
 
 /// Production [`CommandRunner`] that spawns real child processes.
@@ -24,7 +37,30 @@ pub struct SystemRunner;
 
 impl CommandRunner for SystemRunner {
     fn run<'a>(&self, program: &'a str, args: &'a [&'a str]) -> io::Result<CommandOutput> {
-        let out = Command::new(program).args(args).output()?;
+        self.run_stdin(program, args, &[])
+    }
+
+    fn run_stdin<'a>(
+        &self,
+        program: &'a str,
+        args: &'a [&'a str],
+        stdin: &'a [u8],
+    ) -> io::Result<CommandOutput> {
+        let mut child = Command::new(program)
+            .args(args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()?;
+        // Write stdin from a dedicated thread to avoid deadlocking when both
+        // the input and the output exceed the OS pipe buffer.
+        if let Some(mut sink) = child.stdin.take() {
+            let data = stdin.to_vec();
+            std::thread::spawn(move || {
+                let _ = sink.write_all(&data);
+            });
+        }
+        let out = child.wait_with_output()?;
         Ok(CommandOutput {
             stdout: out.stdout,
             stderr: out.stderr,
@@ -97,5 +133,38 @@ mod tests {
         // `false` always exits with status 1
         let result = runner.run("false", &[]).unwrap();
         assert!(!result.success);
+    }
+
+    #[test]
+    fn system_runner_feeds_stdin_to_child() {
+        let runner = SystemRunner;
+        // `cat` echoes its stdin back to stdout.
+        let result = runner.run_stdin("cat", &[], b"piped input\n").unwrap();
+        assert!(result.success);
+        assert_eq!(result.stdout, b"piped input\n");
+    }
+
+    #[test]
+    fn system_runner_run_stdin_missing_program_errors() {
+        let runner = SystemRunner;
+        assert!(
+            runner
+                .run_stdin("__no_such_program__", &[], b"")
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn mock_runner_run_stdin_returns_preset_output() {
+        let mut mock = MockCommandRunner::new();
+        mock.expect_run_stdin().returning(|_, _, _| {
+            Ok(CommandOutput {
+                stdout: b"ok".to_vec(),
+                stderr: vec![],
+                success: true,
+            })
+        });
+        let result = mock.run_stdin("grep", &["x"], b"input").unwrap();
+        assert_eq!(result.stdout, b"ok");
     }
 }
