@@ -53,3 +53,35 @@ HaH is intended to help with:
 - duplicate software installs across package managers
 - network configuration hygiene (NTP, DHCP, DNS, interface management)
 - general system health checks
+
+---
+
+## Security
+
+HaH is **read-only**—it performs no writes, no socket modifications, and no privileged operations. It can safely run with **zero Linux capabilities**.
+
+### Recommended hardened deployment
+
+```bash
+# Create dedicated non-root user with minimal group membership
+useradd -r -s /usr/sbin/nologin hah-checker
+usermod -a -G adm,systemd-journal hah-checker
+
+# Drop all capabilities from the binary
+setcap -r /path/to/hah
+
+# Run as that user (group membership handles all file access)
+sudo -u hah-checker hah scan
+```
+
+### Container deployment
+
+```bash
+docker run \
+  --read-only \
+  --cap-drop=ALL \
+  --user hah-checker \
+  hah scan
+```
+
+HaH requires **no capabilities**—standard Unix group permissions (`adm` for logs, `systemd-journal` for journal access) provide all necessary access without privilege escalation.
