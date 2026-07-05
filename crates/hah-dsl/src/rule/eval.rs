@@ -64,7 +64,11 @@ fn eval_numeric_threshold(
 ) -> Result<bool> {
     let lhs = eval_expr(value, values)?;
     let rhs = eval_expr(threshold, values)?;
-    match (lhs.as_int(), rhs.as_int()) {
+
+    let lhs_num = lhs.as_int().or_else(|| lhs.is_blank().then_some(0));
+    let rhs_num = rhs.as_int().or_else(|| rhs.is_blank().then_some(0));
+
+    match (lhs_num, rhs_num) {
         (Some(l), Some(r)) => Ok(numeric_compare(l, operator, r)),
         _ => Err(anyhow!(
             "numeric_threshold: both sides must be numeric (got {:?} and {:?})",

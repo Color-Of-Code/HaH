@@ -138,6 +138,30 @@ rules:
 }
 
 #[test]
+fn numeric_threshold_treats_blank_values_as_zero() {
+    let check = make_check(
+        r#"
+rules:
+  - id: x
+    title: X
+    conditions:
+      - warning: "$size > 0"
+    outcome:
+      id: x
+      title: "low"
+      description: ""
+"#,
+    );
+    let mut values: ValueMap = HashMap::new();
+    values.insert("size".into(), RuleValue::Str(String::new()));
+    assert!(
+        !check
+            .eval_condition(&check.rule.conditions[0], &values)
+            .unwrap()
+    );
+}
+
+#[test]
 fn numeric_threshold_lt_does_not_trigger_when_above() {
     let check = make_check(
         r#"
