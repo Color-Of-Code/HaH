@@ -12,7 +12,7 @@ rules:
       for_each:
         list: "$large_images"
         as: entry
-      finding_id: "initramfs-large-{entry}"
+      id: "initramfs-large-{entry}"
       title: "Oversized initramfs: {entry} MB"
       description: >-
         initramfs image {entry} exceeds the threshold.

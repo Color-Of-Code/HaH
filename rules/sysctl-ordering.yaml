@@ -16,7 +16,7 @@ rules:
       - warning: "$conflicts"
 
     outcome:
-      finding_id: sysctl-ordering
+      id: sysctl-ordering
       title: "{conflict_count} sysctl key(s) with conflicting values"
       description: >
         The following sysctl keys are set to different values in multiple

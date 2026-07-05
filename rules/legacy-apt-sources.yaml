@@ -17,7 +17,7 @@ rules:
       for_each:
         list: "$legacy_files"
         as: file
-      finding_id: "legacy-sources-format-{{ file }}"
+      id: "legacy-sources-format-{{ file }}"
       title: "Legacy one-line APT source: {{ file }}"
       description: >-
         {{ file }} uses the deprecated one-line `deb` format.

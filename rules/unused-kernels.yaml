@@ -18,7 +18,7 @@ rules:
       - warning: "$unused_kernels"
 
     outcome:
-      finding_id: unused-kernels
+      id: unused-kernels
       title: "{unused_count} unused kernel package(s) installed"
       description: >
         These kernel packages are installed but do not match the running kernel

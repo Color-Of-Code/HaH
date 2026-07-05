@@ -12,7 +12,7 @@ rules:
       - warning: "$gpg_size > 0"
 
     outcome:
-      finding_id: apt-key-legacy-gpg
+      id: apt-key-legacy-gpg
       title: "Legacy /etc/apt/trusted.gpg keyring is in use"
       description: >
         The file /etc/apt/trusted.gpg is non-empty. Keys managed here were added

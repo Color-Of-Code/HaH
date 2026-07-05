@@ -18,7 +18,7 @@ rules:
       - warning: "$journal_mb > $threshold_mb"
 
     outcome:
-      finding_id: journal-size-large
+      id: journal-size-large
       title: "systemd journal is {journal_mb} MB"
       description: >
         The systemd journal occupies {journal_mb} MB,

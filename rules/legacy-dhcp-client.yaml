@@ -27,7 +27,7 @@ rules:
               - info: "$networkd_active == true"
 
     outcome:
-      finding_id: legacy-dhcp-client
+      id: legacy-dhcp-client
       title: "Legacy isc-dhcp-client installed alongside a modern network manager"
       description: >
         The isc-dhcp-client (dhclient) package is installed but a modern network

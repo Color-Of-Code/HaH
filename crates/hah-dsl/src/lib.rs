@@ -83,7 +83,7 @@ rules:
     conditions:
       - info: "$x > 0"
     outcome:
-      finding_id: test
+      id: test
       title: T
       description: D
 "#,
@@ -115,7 +115,7 @@ rules:
     conditions:
       - info: "$x > 0"
     outcome:
-      finding_id: a
+      id: a
       title: A
       description: A
   - id: same
@@ -123,7 +123,7 @@ rules:
     conditions:
       - info: "$y > 0"
     outcome:
-      finding_id: b
+      id: b
       title: B
       description: B
 "#,
@@ -153,7 +153,7 @@ rules:
     conditions:
       - info: "$x > 0"
     outcome:
-      finding_id: t
+      id: t
       title: T
       description: D
 "#

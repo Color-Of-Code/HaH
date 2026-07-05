@@ -17,7 +17,7 @@ rules:
       for_each:
         list: "$denied"
         as: entry
-      finding_id: "user-denylist-{{ entry }}"
+      id: "user-denylist-{{ entry }}"
       title: "Denylisted package installed: {{ entry }}"
       description: >-
         A package from the configured denylist is installed: {{ entry }}.

@@ -18,7 +18,7 @@ rules:
       - info: "$stale_headers"
 
     outcome:
-      finding_id: stale-kernel-headers
+      id: stale-kernel-headers
       title: "{stale_count} stale kernel header package(s)"
       description: "Header packages with no matching kernel: {stale_list}."
       remediation:

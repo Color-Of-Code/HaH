@@ -22,7 +22,7 @@ rules:
           - warning: "$uninstalled_modules"
 
     outcome:
-      finding_id: dkms-broken
+      id: dkms-broken
       title: "DKMS reports module build problems"
       description: >
         dkms status reports broken or not-installed modules.

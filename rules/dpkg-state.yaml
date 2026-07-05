@@ -17,7 +17,7 @@ rules:
       - critical: "$audit_output | trim"
 
     outcome:
-      finding_id: dpkg-audit
+      id: dpkg-audit
       title: "dpkg audit reports package state problems"
       description: "{audit_output}"
       remediation:

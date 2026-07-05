@@ -325,7 +325,7 @@ impl RuleBasedCheck {
                 .collect(),
         });
         Finding {
-            id: render_template(&out.finding_id, values),
+            id: render_template(&out.id, values),
             title: render_template(&out.title, values),
             description: render_template(&out.description, values),
             severity,

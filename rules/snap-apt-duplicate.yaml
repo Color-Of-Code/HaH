@@ -23,7 +23,7 @@ rules:
       for_each:
         list: "$duplicates"
         as: pkg
-      finding_id: "snap-apt-dup-{pkg}"
+      id: "snap-apt-dup-{pkg}"
       title: "'{pkg}' is installed via both APT and Snap"
       description: "Having '{pkg}' installed twice wastes space and may cause version conflicts or confusion."
       remediation:

@@ -16,7 +16,7 @@ rules:
       - warning: "$broken"
 
     outcome:
-      finding_id: broken-symlinks
+      id: broken-symlinks
       title: "{broken_count} broken symbolic link(s) found"
       description: >
         The following symlinks point to non-existent targets: {broken_list}.

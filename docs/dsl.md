@@ -257,7 +257,7 @@ Multiple guard keys are combined with AND.
 
 ```yaml
 outcome:
-  finding_id: boot-space-low
+  id: boot-space-low
   title: "/boot has only {free_mb} MB free"
   description: "The /boot partition is nearly full ({free_mb} MB free, threshold: {threshold_boot_space_mb} MB)."
   remediation:
@@ -281,7 +281,7 @@ outcome:
   for_each:
     list: "$duplicates"
     as: pkg
-  finding_id: "snap-apt-dup-{pkg}"
+  id: "snap-apt-dup-{pkg}"
   title: "'{pkg}' is installed via both APT and Snap"
   description: "Having '{pkg}' installed twice wastes space."
   remediation:
@@ -331,7 +331,7 @@ rules:
       package_count: "$residual_packages | count"
       packages: "$residual_packages | join(' ')"
     outcome:
-      finding_id: residual-config
+      id: residual-config
       title: "{package_count} package(s) with residual configuration"
       description: "These packages were removed but their configuration files remain: {packages}."
 ```

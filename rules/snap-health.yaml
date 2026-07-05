@@ -23,7 +23,7 @@ rules:
           - info: "$excess_revisions"
 
     outcome:
-      finding_id: snap-health
+      id: snap-health
       title: "Snap revisions need attention"
       description: >
         Disabled revisions: {disabled_lines}.

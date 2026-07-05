@@ -18,7 +18,7 @@ rules:
     conditions:
       - warning: "$ntp_count > 1"
     outcome:
-      finding_id: ntp-conflict
+      id: ntp-conflict
       title: "Multiple NTP services active: {ntp_list}"
       description: >-
         The following time-sync services are all active: {ntp_list}.

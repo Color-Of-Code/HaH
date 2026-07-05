@@ -264,7 +264,7 @@ pub enum ExpectedValue {
 /// Template for the finding produced when a condition fires.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RuleOutcome {
-    pub finding_id: String,
+    pub id: String,
     pub title: String,
     pub description: String,
     #[serde(default)]

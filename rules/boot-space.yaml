@@ -17,7 +17,7 @@ rules:
       - critical: "$free_mb < $threshold_mb"
 
     outcome:
-      finding_id: boot-space-low
+      id: boot-space-low
       title: "/boot has only {free_mb} MB free"
       description: >
         The /boot partition is nearly full ({free_mb} MB free,

@@ -20,7 +20,7 @@ rules:
       - info: "$autoremovable_count > 0"
 
     outcome:
-      finding_id: autoremovable
+      id: autoremovable
       title: "{autoremovable_count} auto-removable package(s)"
       description: >
         {autoremovable_count} package(s) are no longer needed and can be removed.

@@ -15,7 +15,7 @@ rules:
           - warning: "$resolved_active == true"
           - warning: "$target | contains('systemd/resolve') != true"
     outcome:
-      finding_id: resolved-config
+      id: resolved-config
       title: "/etc/resolv.conf is not linked to systemd-resolved"
       description: >-
         systemd-resolved is active but /etc/resolv.conf is not a symlink

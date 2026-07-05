@@ -22,7 +22,7 @@ rules:
       - info: "$rc_packages"
 
     outcome:
-      finding_id: residual-config
+      id: residual-config
       title: "{rc_count} package(s) with residual configuration"
       description: >
         These packages were removed but their configuration files remain: {packages}.

@@ -38,7 +38,7 @@ rules:
     conditions:
       - info: "$nothing"
     outcome:
-      finding_id: test
+      id: test
       title: "Test finding"
       description: "Description."
 "#;
@@ -76,7 +76,7 @@ rules:
     conditions:
       - warning: "$items"
     outcome:
-      finding_id: x
+      id: x
       title: "found"
       description: ""
 "#,
@@ -96,7 +96,7 @@ rules:
     conditions:
       - warning: "$items"
     outcome:
-      finding_id: x
+      id: x
       title: "found"
       description: ""
 "#,
@@ -123,7 +123,7 @@ rules:
     conditions:
       - critical: "$free < 100"
     outcome:
-      finding_id: x
+      id: x
       title: "low"
       description: ""
 "#,
@@ -147,7 +147,7 @@ rules:
     conditions:
       - critical: "$free < 100"
     outcome:
-      finding_id: x
+      id: x
       title: "low"
       description: ""
 "#,
@@ -175,7 +175,7 @@ rules:
           args: ["hello"]
     conditions: []
     outcome:
-      finding_id: x
+      id: x
       title: ""
       description: ""
 "#,
@@ -208,7 +208,7 @@ rules:
     conditions:
       - critical: "$free_mb < 50"
     outcome:
-      finding_id: x
+      id: x
       title: "{free_mb} MB"
       description: ""
 "#,
@@ -244,7 +244,7 @@ rules:
     conditions:
       - warning: "$nothing"
     outcome:
-      finding_id: x
+      id: x
       title: ""
       description: ""
 "#,
@@ -273,7 +273,7 @@ rules:
       outcome: shared_rem
     conditions: []
     outcome:
-      finding_id: x
+      id: x
       title: "found"
       description: ""
 "#,
@@ -293,7 +293,7 @@ rules:
     title: X
     conditions: []
     outcome:
-      finding_id: "x-{count}"
+      id: "x-{count}"
       title: "{count} items"
       description: "Found {count} items."
 "#,
@@ -339,7 +339,7 @@ rules:
           paths: ["/nonexistent/sysctl.d"]
     conditions:
       - warning: "$conflicts"
-    outcome: { finding_id: x, title: "", description: "" }
+    outcome: { id: x, title: "", description: "" }
 "#,
     );
     let ctx = Context::new(false, Config::default(), DistroInfo::default());
@@ -359,7 +359,7 @@ rules:
     triggers:
       - name: empty_trigger
     conditions: []
-    outcome: { finding_id: x, title: "", description: "" }
+    outcome: { id: x, title: "", description: "" }
 "#,
     );
     let ctx = Context::new(false, Config::default(), DistroInfo::default());
@@ -371,7 +371,7 @@ rules:
 
 fn make_equals_check(expected_yaml: &str) -> RuleBasedCheck {
     make_check(&format!(
-        "rules:\n  - id: x\n    title: X\n    conditions:\n      - warning: '$val == {expected_yaml}'\n    outcome: {{ finding_id: x, title: \"\", description: \"\" }}\n"
+        "rules:\n  - id: x\n    title: X\n    conditions:\n      - warning: '$val == {expected_yaml}'\n    outcome: {{ id: x, title: \"\", description: \"\" }}\n"
     ))
 }
 
@@ -418,7 +418,7 @@ rules:
       - all:
           - info: "$a == true"
           - info: "$b == true"
-    outcome: { finding_id: x, title: "", description: "" }
+    outcome: { id: x, title: "", description: "" }
 "#;
 
 const ANY_YAML: &str = r#"
@@ -429,7 +429,7 @@ rules:
       - any:
           - info: "$a == true"
           - info: "$b == true"
-    outcome: { finding_id: x, title: "", description: "" }
+    outcome: { id: x, title: "", description: "" }
 "#;
 
 #[test]
@@ -479,7 +479,7 @@ rules:
     title: X
     conditions:
       - info: '$val =~ "^foo.*"'
-    outcome: { finding_id: x, title: "", description: "" }
+    outcome: { id: x, title: "", description: "" }
 "#,
     );
     let mut v = HashMap::new();
@@ -504,7 +504,7 @@ rules:
     title: X
     conditions:
       - info: '$val =~ "[invalid"'
-    outcome: { finding_id: x, title: "", description: "" }
+    outcome: { id: x, title: "", description: "" }
 "#,
     );
     assert!(
@@ -523,7 +523,7 @@ rules:
     title: X
     conditions:
       - warning: '$val =~ "legacy"'
-    outcome: { finding_id: x, title: "Legacy found", description: "" }
+    outcome: { id: x, title: "Legacy found", description: "" }
 "#,
     );
     let ctx = Context::new(false, Config::default(), DistroInfo::default());
@@ -550,7 +550,7 @@ rules:
     title: X
     conditions:
       - info: "$val {op} 10"
-    outcome: {{ finding_id: x, title: "", description: "" }}
+    outcome: {{ id: x, title: "", description: "" }}
 "#
     ))
 }
@@ -604,7 +604,7 @@ rules:
     only_if:
       profile: [server]
     conditions: []
-    outcome: { finding_id: x, title: "", description: "" }
+    outcome: { id: x, title: "", description: "" }
 "#,
     );
     let ctx = Context::new(false, Config::default(), DistroInfo::default());
@@ -622,7 +622,7 @@ rules:
     only_if:
       profile: [server]
     conditions: []
-    outcome: { finding_id: x, title: "", description: "" }
+    outcome: { id: x, title: "", description: "" }
 "#,
     );
     let config = Config {
@@ -643,7 +643,7 @@ rules:
     only_if:
       require_commands: ["__nonexistent_cmd_hah_test__"]
     conditions: []
-    outcome: { finding_id: x, title: "", description: "" }
+    outcome: { id: x, title: "", description: "" }
 "#,
     );
     let ctx = Context::new(false, Config::default(), DistroInfo::default());
@@ -660,7 +660,7 @@ rules:
     only_if:
       require_commands: ["ls"]
     conditions: []
-    outcome: { finding_id: x, title: "", description: "" }
+    outcome: { id: x, title: "", description: "" }
 "#,
     );
     let ctx = Context::new(false, Config::default(), DistroInfo::default());
@@ -680,7 +680,7 @@ rules:
           name: mypkg
     conditions:
       - warning: "$installed == true"
-    outcome: { finding_id: x, title: "installed", description: "" }
+    outcome: { id: x, title: "installed", description: "" }
 "#;
 
 const PROBE_SVC_YAML: &str = r#"
@@ -694,7 +694,7 @@ rules:
           name: mysvc
     conditions:
       - info: "$active == true"
-    outcome: { finding_id: x, title: "active", description: "" }
+    outcome: { id: x, title: "active", description: "" }
 "#;
 
 #[test]
@@ -792,7 +792,7 @@ rules:
       outcome: shared_rem
     conditions: []
     outcome:
-      finding_id: x
+      id: x
       title: "found"
       description: ""
       remediation:
@@ -815,7 +815,7 @@ rules:
     title: X
     conditions:
       - info: "$config.boot_space_mb > 0"
-    outcome: { finding_id: x, title: "low", description: "" }
+    outcome: { id: x, title: "low", description: "" }
 "#,
     );
     let mut config = Config::default();
@@ -842,7 +842,7 @@ rules:
     values:
       parsed: "$raw | number"
     conditions: []
-    outcome: { finding_id: x, title: "", description: "" }
+    outcome: { id: x, title: "", description: "" }
 "#,
     );
     let mut mock = MockCommandRunner::new();
@@ -868,7 +868,7 @@ rules:
     title: X
     conditions:
       - info: '$distro.family == "debian"'
-    outcome: { finding_id: x, title: "debian", description: "" }
+    outcome: { id: x, title: "debian", description: "" }
 "#,
     );
     let distro = DistroInfo {
@@ -894,7 +894,7 @@ rules:
       for_each:
         list: "$items"
         as: item
-      finding_id: "item-{item}"
+      id: "item-{item}"
       title: "Found {item}"
       description: "Desc for {item}"
 "#,
@@ -928,7 +928,7 @@ rules:
       for_each:
         list: "$items"
         as: item
-      finding_id: "item-{item}"
+      id: "item-{item}"
       title: "Found {item}"
       description: ""
 "#,
@@ -973,7 +973,7 @@ rules:
     conditions:
       - info: "$count > 0"
     outcome:
-      finding_id: t
+      id: t
       title: T
       description: ""
 "#;
@@ -1008,7 +1008,7 @@ rules:
     conditions:
       - critical: "$free_mb <= $threshold_mb"
     outcome:
-      finding_id: t
+      id: t
       title: T
       description: ""
 "#;
@@ -1039,7 +1039,7 @@ rules:
     conditions:
       - warning: "$ntp_installed == true"
     outcome:
-      finding_id: t
+      id: t
       title: T
       description: ""
 "#;
@@ -1068,7 +1068,7 @@ rules:
     conditions:
       - info: "$active != true"
     outcome:
-      finding_id: t
+      id: t
       title: T
       description: ""
 "#;
@@ -1090,7 +1090,7 @@ rules:
     conditions:
       - warning: "$items"
     outcome:
-      finding_id: t
+      id: t
       title: T
       description: ""
 "#;
@@ -1113,7 +1113,7 @@ rules:
     conditions:
       - critical: "$output | lines | non_empty"
     outcome:
-      finding_id: t
+      id: t
       title: T
       description: ""
 "#;
@@ -1138,7 +1138,7 @@ rules:
           - warning: "$x == true"
           - warning: "$y > 5"
     outcome:
-      finding_id: t
+      id: t
       title: T
       description: ""
 "#;
@@ -1167,7 +1167,7 @@ rules:
           - info: "$a"
           - warning: "$b"
     outcome:
-      finding_id: t
+      id: t
       title: T
       description: ""
 "#;
@@ -1199,7 +1199,7 @@ rules:
               - warning: "$chrony_active == true"
               - warning: "$timesyncd_active == true"
     outcome:
-      finding_id: t
+      id: t
       title: T
       description: ""
 "#;
@@ -1227,7 +1227,7 @@ rules:
     conditions:
       - warning: "$status =~ '^overlap:'"
     outcome:
-      finding_id: t
+      id: t
       title: T
       description: ""
 "#;
@@ -1256,7 +1256,7 @@ rules:
     conditions:
       - info: '$line =~ "^COMPRESS=lz4"'
     outcome:
-      finding_id: t
+      id: t
       title: T
       description: ""
 "#;

@@ -43,7 +43,7 @@ rules:
               - warning: "$timesyncd_active == true"
 
     outcome:
-      finding_id: legacy-ntp
+      id: legacy-ntp
       title: "Legacy ntp package is installed alongside an active time-sync service"
       description: >
         The legacy ntp (ISC ntpd) package is installed while a modern time-sync
@@ -79,7 +79,7 @@ rules:
           - info: "$timesyncd_active != true"
 
     outcome:
-      finding_id: legacy-ntp
+      id: legacy-ntp
       title: "Legacy ntp (ISC ntpd) package is installed"
       description: >
         The legacy ntp (ISC ntpd) package is installed. Modern alternatives

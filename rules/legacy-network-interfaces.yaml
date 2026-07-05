@@ -16,7 +16,7 @@ rules:
       - info: "$net_status =~ '^legacy:'"
 
     outcome:
-      finding_id: legacy-network-interfaces
+      id: legacy-network-interfaces
       title: "/etc/network/interfaces has non-loopback entries"
       description: >-
         /etc/network/interfaces defines non-loopback interface(s) using the

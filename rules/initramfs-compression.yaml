@@ -22,7 +22,7 @@ rules:
           - info: "$lz4_count == 0"
 
     outcome:
-      finding_id: initramfs-compression-suboptimal
+      id: initramfs-compression-suboptimal
       title: "initramfs compression is not set to zstd or lz4"
       description: >
         The initramfs-tools configuration does not use an optimal compression
