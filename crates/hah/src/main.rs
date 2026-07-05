@@ -15,9 +15,9 @@ use hah_core::{
 };
 use std::sync::Arc;
 
-/// Run a parsed CLI command.  Returns `true` when at least one Critical finding
-/// was produced (the binary should exit with code 1 in that case).
-pub(crate) fn run_with_config(cli: Cli, config: Config, distro: DistroInfo) -> bool {
+/// Run a parsed CLI command. Returns an exit code reflecting the maximum
+/// severity of findings: 0 (none), 1 (Info), 2 (Warning), 3 (Critical).
+pub(crate) fn run_with_config(cli: Cli, config: Config, distro: DistroInfo) -> u32 {
     match cli.command {
         Command::Scan {
             output,
@@ -33,14 +33,15 @@ pub(crate) fn run_with_config(cli: Cli, config: Config, distro: DistroInfo) -> b
             for check in &checks {
                 println!("{:<30} {}", check.id(), check.title());
             }
-            false
+            0
         }
 
         Command::Validate { paths } => run_lint(&paths, &config),
     }
 }
 
-/// Handle the `scan` subcommand.
+/// Handle the `scan` subcommand. Returns exit code: 0 (no findings), 1 (Info),
+/// 2 (Warning), 3 (Critical), or 0 (error/dry-run).
 fn run_scan(
     output: &OutputFormat,
     check: Option<&str>,
@@ -48,7 +49,7 @@ fn run_scan(
     ask: bool,
     config: Config,
     distro: DistroInfo,
-) -> bool {
+) -> u32 {
     let all = registry::all_checks(&config);
     let checks: Vec<_> = match check {
         Some(id) => all.into_iter().filter(|c| c.id() == id).collect(),
@@ -62,14 +63,14 @@ fn run_scan(
 
     if dry_run {
         print_dry_run(&checks);
-        return false;
+        return 0;
     }
 
     let runner = match build_runner(&config, ask) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("hah: {e}");
-            return false;
+            return 0;
         }
     };
     let ctx = Context::new_with_runner(false, config, distro, runner);
@@ -87,9 +88,26 @@ fn run_scan(
 
     output::render(&results, &fmt);
 
-    results
+    results_to_exit_code(&results)
+}
+
+/// Calculate exit code from results: 0 (none), 1 (Info), 2 (Warning), 3 (Critical).
+fn results_to_exit_code(results: &[(String, hah_core::model::CheckResult)]) -> u32 {
+    let max_severity = results
         .iter()
-        .any(|(_, r)| r.findings.iter().any(|f| f.severity == Severity::Critical))
+        .flat_map(|(_, r)| r.findings.iter().map(|f| &f.severity))
+        .max_by_key(|s| match s {
+            Severity::Info => 1,
+            Severity::Warning => 2,
+            Severity::Critical => 3,
+        });
+
+    match max_severity {
+        None => 0,
+        Some(Severity::Info) => 1,
+        Some(Severity::Warning) => 2,
+        Some(Severity::Critical) => 3,
+    }
 }
 
 /// Build a policy-enforcing command runner from the config allowlist.
@@ -129,7 +147,7 @@ fn print_dry_run(checks: &[Box<dyn hah_core::check::Check>]) {
     }
 }
 
-fn run_lint(paths: &[std::path::PathBuf], config: &Config) -> bool {
+fn run_lint(paths: &[std::path::PathBuf], config: &Config) -> u32 {
     let dirs: Vec<std::path::PathBuf> = if paths.is_empty() {
         registry::rule_search_dirs(config)
     } else {
@@ -150,7 +168,7 @@ fn run_lint(paths: &[std::path::PathBuf], config: &Config) -> bool {
     if !has_errors {
         println!("All rule files are valid.");
     }
-    has_errors
+    if has_errors { 1 } else { 0 }
 }
 
 fn collect_yaml_files(path: &std::path::Path) -> Vec<std::path::PathBuf> {
@@ -168,7 +186,7 @@ fn collect_yaml_files(path: &std::path::Path) -> Vec<std::path::PathBuf> {
 }
 
 /// Load config + distro from the real system, then delegate to [`run_with_config`].
-pub(crate) fn run(cli: Cli) -> bool {
+pub(crate) fn run(cli: Cli) -> u32 {
     run_with_config(
         cli,
         Config::load().unwrap_or_default(),
@@ -177,11 +195,12 @@ pub(crate) fn run(cli: Cli) -> bool {
 }
 
 fn main() {
-    if run(Cli::parse()) {
+    let exit_code = run(Cli::parse());
+    if exit_code != 0 {
         // Skip the actual exit when building for coverage measurement so that
         // integration-test drivers are not killed by the instrumented binary.
         #[cfg(not(coverage))]
-        std::process::exit(1);
+        std::process::exit(exit_code as i32);
     }
 }
 
@@ -202,21 +221,27 @@ mod tests {
     }
 
     #[test]
-    fn list_checks_returns_false() {
-        assert!(!run_with_config(
-            parse(&["hah", "list"]),
-            Config::default(),
-            DistroInfo::default(),
-        ));
+    fn list_checks_returns_zero() {
+        assert_eq!(
+            run_with_config(
+                parse(&["hah", "list"]),
+                Config::default(),
+                DistroInfo::default(),
+            ),
+            0
+        );
     }
 
     #[test]
-    fn scan_with_check_filter_no_match_returns_false() {
-        assert!(!run_with_config(
-            parse(&["hah", "scan", "--check", "__no_such_check__"]),
-            Config::default(),
-            DistroInfo::default(),
-        ));
+    fn scan_with_check_filter_no_match_returns_zero() {
+        assert_eq!(
+            run_with_config(
+                parse(&["hah", "scan", "--check", "__no_such_check__"]),
+                Config::default(),
+                DistroInfo::default(),
+            ),
+            0
+        );
     }
 
     #[test]
@@ -258,27 +283,27 @@ mod tests {
         // actually runs and the test remains fast.
         let mut config = Config::default();
         config.enabled_checks = vec!["__force_empty__".into()];
-        assert!(!run_with_config(
-            parse(&["hah", "scan"]),
-            config,
-            DistroInfo::default(),
-        ));
+        assert_eq!(
+            run_with_config(parse(&["hah", "scan"]), config, DistroInfo::default(),),
+            0
+        );
     }
 
     #[test]
     fn scan_boot_space_with_impossible_threshold_returns_critical() {
         // /boot cannot have 999 PB free, so BootSpaceCheck will always fire
-        // a Critical finding → run_with_config returns true.
+        // a Critical finding → run_with_config returns 3.
         let mut config = Config::default();
         config
             .thresholds
             .insert("boot_space_mb".into(), 999_999_999);
-        assert!(
+        assert_eq!(
             run_with_config(
                 parse(&["hah", "scan", "--check", "boot-space"]),
                 config,
                 DistroInfo::default(),
             ),
+            3,
             "/boot should be \"critically low\" against a 999 PB threshold"
         );
     }
@@ -291,46 +316,58 @@ mod tests {
 
     #[test]
     fn scan_dry_run_lists_without_executing() {
-        // Dry-run prints planned commands and never returns Critical.
-        assert!(!run_with_config(
-            parse(&["hah", "scan", "--check", "boot-space", "--dry-run"]),
-            Config::default(),
-            DistroInfo::default(),
-        ));
+        // Dry-run prints planned commands and never returns Critical (exit code 0).
+        assert_eq!(
+            run_with_config(
+                parse(&["hah", "scan", "--check", "boot-space", "--dry-run"]),
+                Config::default(),
+                DistroInfo::default(),
+            ),
+            0
+        );
     }
 
     #[test]
-    fn scan_with_invalid_allow_pattern_returns_false() {
-        // A bad allow regex makes build_runner fail; scan reports and returns false.
+    fn scan_with_invalid_allow_pattern_returns_zero() {
+        // A bad allow regex makes build_runner fail; scan reports and returns 0 (error).
         let mut config = Config::default();
         config.commands.allow = vec!["[".into()];
-        assert!(!run_with_config(
-            parse(&["hah", "scan", "--check", "boot-space"]),
-            config,
-            DistroInfo::default(),
-        ));
+        assert_eq!(
+            run_with_config(
+                parse(&["hah", "scan", "--check", "boot-space"]),
+                config,
+                DistroInfo::default(),
+            ),
+            0
+        );
     }
 
     #[test]
-    fn validate_shipped_rules_returns_false() {
-        assert!(!run_with_config(
-            parse(&["hah", "validate"]),
-            Config::default(),
-            DistroInfo::default(),
-        ));
+    fn validate_shipped_rules_returns_zero() {
+        assert_eq!(
+            run_with_config(
+                parse(&["hah", "validate"]),
+                Config::default(),
+                DistroInfo::default(),
+            ),
+            0
+        );
     }
 
     #[test]
-    fn validate_explicit_rules_dir_returns_false() {
-        assert!(!run_with_config(
-            parse(&["hah", "validate", "rules/"]),
-            Config::default(),
-            DistroInfo::default(),
-        ));
+    fn validate_explicit_rules_dir_returns_zero() {
+        assert_eq!(
+            run_with_config(
+                parse(&["hah", "validate", "rules/"]),
+                Config::default(),
+                DistroInfo::default(),
+            ),
+            0
+        );
     }
 
     #[test]
-    fn validate_bad_file_returns_true() {
+    fn validate_bad_file_returns_one() {
         let dir = tempfile::tempdir().expect("tempdir");
         let path = dir.path().join("bad.yaml");
         std::fs::write(&path, "not: [valid: {{").expect("write");
@@ -339,6 +376,6 @@ mod tests {
             Config::default(),
             DistroInfo::default(),
         );
-        assert!(result);
+        assert_eq!(result, 1);
     }
 }

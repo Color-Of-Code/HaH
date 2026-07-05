@@ -25,10 +25,12 @@ hah <COMMAND>
 
 ### Exit codes
 
-| Code | Meaning                                      |
-| ---- | -------------------------------------------- |
-| `0`  | No findings, or only Info / Warning findings |
-| `1`  | At least one Critical finding was detected   |
+| Code | Meaning                      |
+| ---- | ---------------------------- |
+| `0`  | No findings (clean system)   |
+| `1`  | Highest severity is Info     |
+| `2`  | Highest severity is Warning  |
+| `3`  | Highest severity is Critical |
 
 ---
 
