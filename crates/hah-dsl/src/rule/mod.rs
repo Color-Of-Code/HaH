@@ -18,9 +18,9 @@ use anyhow::{Result, anyhow};
 
 pub use check::RuleBasedCheck;
 pub use model::{
-    Blocks, CapabilitySpec, CommandSpec, CompareOp, ExpectedValue, FileSpec, OutcomeForEach,
-    OutcomeFragment, ProbeSpec, RemediationTemplate, Rule, RuleCondition, RuleGuard, RuleOutcome,
-    RuleSet, RuleTrigger, UseRef,
+    Blocks, CommandSpec, CompareOp, ExpectedValue, FileSpec, OutcomeForEach, OutcomeFragment,
+    ProbeSpec, RemediationTemplate, Rule, RuleCondition, RuleGuard, RuleOutcome, RuleSet,
+    RuleTrigger, UseRef,
 };
 
 impl RuleSet {

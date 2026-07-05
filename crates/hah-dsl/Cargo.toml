@@ -7,7 +7,6 @@ edition = "2024"
 workspace = true
 
 [dependencies]
-hah-caps = { path = "../hah-caps" }
 hah-core = { path = "../hah-core" }
 hah-utils = { path = "../hah-utils" }
 anyhow = "1"

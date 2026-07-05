@@ -154,45 +154,6 @@ pub enum ProbeSpec {
     },
 }
 
-/// Rust-backed capability trigger (complex analysis delegated to Rust).
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum CapabilitySpec {
-    SysctlConflicts {
-        #[serde(default)]
-        paths: Vec<String>,
-    },
-    BrokenSymlinks {
-        #[serde(default)]
-        paths: Vec<String>,
-    },
-    OldFiles {
-        #[serde(default)]
-        paths: Vec<String>,
-        older_than_days: u64,
-    },
-    KernelInventory,
-    StaleKernelHeaders,
-    JournalUsage,
-    LargeInitramfs {
-        #[serde(default = "default_initramfs_threshold")]
-        threshold_mb: u64,
-    },
-    LegacyAptSources,
-    LegacyNetworkInterfaces,
-    InstalledDenylist,
-    /// Scan log lines from a file or command, filtered by regex patterns.
-    LogScan {
-        source: LogSource,
-        #[serde(default)]
-        patterns: Vec<String>,
-    },
-}
-
-fn default_initramfs_threshold() -> u64 {
-    100
-}
-
 // ── Conditions ────────────────────────────────────────────────────────────────
 
 /// A typed condition predicate.

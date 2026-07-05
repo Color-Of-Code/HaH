@@ -1,6 +1,7 @@
 //! [`RuleBasedCheck`]: the [`Check`] implementation that evaluates a declarative rule.
 
 use std::collections::HashMap;
+use std::io;
 use std::sync::Arc;
 
 use anyhow::{Result, anyhow};
@@ -10,16 +11,28 @@ use hah_core::{
     model::{CheckResult, Finding, Remediation, Severity},
 };
 
-use crate::{
-    caps_bridge,
-    pipeline::{RuleValue, ValueMap, eval_expr, render_template},
-};
+use crate::pipeline::{RuleValue, ValueMap, eval_expr, render_template};
 
 use super::eval;
 use super::model::{
-    Blocks, CapabilitySpec, ProbeSpec, RemediationTemplate, Rule, RuleCondition, RuleGuard,
-    RuleTrigger,
+    Blocks, ProbeSpec, RemediationTemplate, Rule, RuleCondition, RuleGuard, RuleTrigger,
 };
+
+// ── Blocked command signalling ────────────────────────────────────────────────
+
+/// Error marker meaning a command was refused by the execution policy.  When a
+/// trigger fails with this, the whole check is reported as *skipped* rather
+/// than errored.
+#[derive(Debug)]
+pub(crate) struct BlockedCommand(pub String);
+
+impl std::fmt::Display for BlockedCommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "command not allowed: {}", self.0)
+    }
+}
+
+impl std::error::Error for BlockedCommand {}
 
 // ── RuleBasedCheck ────────────────────────────────────────────────────────────
 
@@ -61,6 +74,9 @@ impl Check for RuleBasedCheck {
                     values.insert(trigger.name.clone(), v);
                 }
                 Err(e) => {
+                    if let Some(blocked) = e.downcast_ref::<BlockedCommand>() {
+                        return CheckResult::skipped(blocked.0.clone());
+                    }
                     return CheckResult::default()
                         .with_error(format!("trigger '{}': {e}", trigger.name));
                 }
@@ -81,6 +97,26 @@ impl Check for RuleBasedCheck {
 
         // ── 5. Evaluate conditions ────────────────────────────────────────────
         self.eval_conditions(&values)
+    }
+
+    fn planned_commands(&self) -> Vec<Vec<String>> {
+        let mut cmds = Vec::new();
+        for trigger in &self.rule.triggers {
+            if let Some(spec) = &trigger.command {
+                let mut argv = vec![spec.program.clone()];
+                argv.extend(spec.args.iter().cloned());
+                cmds.push(argv);
+            }
+            if let Some(stages) = &trigger.pipeline {
+                cmds.extend(stages.iter().cloned());
+            }
+            if let Some(probe) = &trigger.probe {
+                if let Some(argv) = probe_command(probe) {
+                    cmds.push(argv);
+                }
+            }
+        }
+        cmds
     }
 }
 
@@ -138,6 +174,17 @@ impl RuleBasedCheck {
                     .packages
                     .iter()
                     .map(|s| RuleValue::Str(s.clone()))
+                    .collect(),
+            ),
+        );
+        values.insert(
+            "config.denylist.packages".into(),
+            RuleValue::List(
+                ctx.config
+                    .denylist
+                    .packages
+                    .iter()
+                    .map(|e| RuleValue::Str(e.name.clone()))
                     .collect(),
             ),
         );
@@ -207,22 +254,19 @@ impl RuleBasedCheck {
     ) -> Result<RuleValue> {
         let raw = if let Some(spec) = &trigger.command {
             let args: Vec<&str> = spec.args.iter().map(String::as_str).collect();
-            let out = ctx
-                .runner
-                .run(&spec.program, &args)
-                .map_err(|e| anyhow!("command '{}': {e}", spec.program))?;
+            let out = run_checked(ctx, &spec.program, &args, &[])?;
             RuleValue::Str(String::from_utf8_lossy(&out.stdout).into_owned())
+        } else if let Some(stages) = &trigger.pipeline {
+            run_pipeline(ctx, stages)?
         } else if let Some(spec) = &trigger.file {
             // Return Null (not an error) when the file does not exist so that
             // `require_files` guards and `default('')` pipelines can handle it.
             std::fs::read_to_string(&spec.path).map_or(RuleValue::Null, RuleValue::Str)
         } else if let Some(spec) = &trigger.probe {
             run_probe(spec, ctx)
-        } else if let Some(spec) = &trigger.capability {
-            return dispatch_capability(spec, ctx);
         } else {
             return Err(anyhow!(
-                "trigger '{}' has no command, probe, or capability",
+                "trigger '{}' has no command, pipeline, file, or probe",
                 trigger.name
             ));
         };
@@ -239,10 +283,41 @@ impl RuleBasedCheck {
     }
 }
 
-// ── Capability dispatch ───────────────────────────────────────────────────────
+// ── Command execution helpers ─────────────────────────────────────────────────
 
-fn dispatch_capability(spec: &CapabilitySpec, ctx: &Context) -> Result<RuleValue> {
-    caps_bridge::dispatch(spec, ctx)
+/// Run one command through the context runner, converting a policy rejection
+/// into a [`BlockedCommand`] error.
+fn run_checked(
+    ctx: &Context,
+    program: &str,
+    args: &[&str],
+    stdin: &[u8],
+) -> Result<hah_core::runner::CommandOutput> {
+    match ctx.runner.run_stdin(program, args, stdin) {
+        Ok(out) => Ok(out),
+        Err(e) if e.kind() == io::ErrorKind::PermissionDenied => {
+            Err(anyhow::Error::new(BlockedCommand(program.to_string())))
+        }
+        Err(e) => Err(anyhow!("command '{program}': {e}")),
+    }
+}
+
+/// Execute a declarative command pipeline, feeding each stage's stdout into the
+/// next stage's stdin.  The final stage's stdout is returned as a `Str`.
+fn run_pipeline(ctx: &Context, stages: &[Vec<String>]) -> Result<RuleValue> {
+    if stages.is_empty() {
+        return Err(anyhow!("pipeline has no stages"));
+    }
+    let mut input: Vec<u8> = Vec::new();
+    for stage in stages {
+        let Some((program, rest)) = stage.split_first() else {
+            return Err(anyhow!("pipeline stage is empty"));
+        };
+        let args: Vec<&str> = rest.iter().map(String::as_str).collect();
+        let out = run_checked(ctx, program, &args, &input)?;
+        input = out.stdout;
+    }
+    Ok(RuleValue::Str(String::from_utf8_lossy(&input).into_owned()))
 }
 
 pub(crate) fn run_probe(spec: &ProbeSpec, ctx: &Context) -> RuleValue {
@@ -263,6 +338,26 @@ pub(crate) fn run_probe(spec: &ProbeSpec, ctx: &Context) -> RuleValue {
             .map_or(RuleValue::Null, |target| {
                 RuleValue::Str(target.to_string_lossy().into_owned())
             }),
+    }
+}
+
+/// The external command a probe runs, for `--dry-run` previews.  Filesystem
+/// probes (`file_size`, `symlink_target`) run no external command.
+fn probe_command(spec: &ProbeSpec) -> Option<Vec<String>> {
+    match spec {
+        ProbeSpec::PackageInstalled { name } => Some(vec![
+            "dpkg-query".into(),
+            "-W".into(),
+            "-f=${Status}".into(),
+            name.clone(),
+        ]),
+        ProbeSpec::ServiceActive { name } => Some(vec![
+            "systemctl".into(),
+            "is-active".into(),
+            "--quiet".into(),
+            name.clone(),
+        ]),
+        ProbeSpec::FileSize { .. } | ProbeSpec::SymlinkTarget { .. } => None,
     }
 }
 
