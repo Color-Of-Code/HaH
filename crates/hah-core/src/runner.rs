@@ -4,7 +4,7 @@ use std::{
 };
 
 /// Output captured from a [`CommandRunner::run`] call.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CommandOutput {
     pub stdout: Vec<u8>,
     pub stderr: Vec<u8>,
@@ -147,11 +147,7 @@ mod tests {
     #[test]
     fn system_runner_run_stdin_missing_program_errors() {
         let runner = SystemRunner;
-        assert!(
-            runner
-                .run_stdin("__no_such_program__", &[], b"")
-                .is_err()
-        );
+        assert!(runner.run_stdin("__no_such_program__", &[], b"").is_err());
     }
 
     #[test]

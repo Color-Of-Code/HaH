@@ -24,6 +24,14 @@ pub enum Command {
         /// Run only the check with this ID
         #[arg(long)]
         check: Option<String>,
+
+        /// List the checks and the commands they would run, without executing
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Prompt for approval before running any non-allowlisted command
+        #[arg(long)]
+        ask: bool,
     },
 
     /// List all registered checks with their IDs
@@ -67,9 +75,29 @@ mod tests {
 
     #[test]
     fn parse_scan_defaults() {
-        if let Command::Scan { output, check } = parse(&["hah", "scan"]).command {
+        if let Command::Scan {
+            output,
+            check,
+            dry_run,
+            ask,
+        } = parse(&["hah", "scan"]).command
+        {
             assert!(matches!(output, OutputFormat::Terminal));
             assert!(check.is_none());
+            assert!(!dry_run);
+            assert!(!ask);
+        } else {
+            panic!("expected Scan");
+        }
+    }
+
+    #[test]
+    fn parse_scan_dry_run_and_ask() {
+        if let Command::Scan { dry_run, ask, .. } =
+            parse(&["hah", "scan", "--dry-run", "--ask"]).command
+        {
+            assert!(dry_run);
+            assert!(ask);
         } else {
             panic!("expected Scan");
         }

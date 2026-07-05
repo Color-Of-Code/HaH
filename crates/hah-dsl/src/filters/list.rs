@@ -538,9 +538,7 @@ mod tests {
         let result = conflicts(input).unwrap();
         assert_eq!(
             result,
-            list(&[
-                "net.ipv4.ip_forward: /etc/sysctl.d/a.conf=0, /etc/sysctl.d/b.conf=1"
-            ])
+            list(&["net.ipv4.ip_forward: /etc/sysctl.d/a.conf=0, /etc/sysctl.d/b.conf=1"])
         );
     }
 

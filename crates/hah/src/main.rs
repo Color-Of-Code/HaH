@@ -10,43 +10,21 @@ use hah_core::{
     distro::DistroInfo,
     model::Severity,
     output::{self, OutputFormat as CoreOutputFormat},
+    policy::{self, Approver, ExecMode, PolicyRunner},
+    runner::SystemRunner,
 };
+use std::sync::Arc;
 
 /// Run a parsed CLI command.  Returns `true` when at least one Critical finding
 /// was produced (the binary should exit with code 1 in that case).
 pub(crate) fn run_with_config(cli: Cli, config: Config, distro: DistroInfo) -> bool {
     match cli.command {
-        Command::Scan { output, check } => {
-            let all = registry::all_checks(&config);
-            let ctx = Context::new(false, config, distro);
-            let checks: Vec<_> = match &check {
-                Some(id) => all.into_iter().filter(|c| c.id() == id).collect(),
-                None => all,
-            };
-
-            // Respect enabled/disabled_checks from config
-            let checks: Vec<_> = checks
-                .into_iter()
-                .filter(|c| ctx.config.check_enabled(c.id()))
-                .collect();
-
-            let results: Vec<_> = checks
-                .iter()
-                .map(|c| (c.id().to_string(), c.run(&ctx)))
-                .collect();
-
-            let fmt = match output {
-                OutputFormat::Terminal => CoreOutputFormat::Terminal,
-                OutputFormat::Json => CoreOutputFormat::Json,
-                OutputFormat::Yaml => CoreOutputFormat::Yaml,
-            };
-
-            output::render(&results, &fmt);
-
-            results
-                .iter()
-                .any(|(_, r)| r.findings.iter().any(|f| f.severity == Severity::Critical))
-        }
+        Command::Scan {
+            output,
+            check,
+            dry_run,
+            ask,
+        } => run_scan(&output, check.as_deref(), dry_run, ask, config, distro),
 
         Command::List => {
             let checks = registry::all_checks(&config);
@@ -59,6 +37,95 @@ pub(crate) fn run_with_config(cli: Cli, config: Config, distro: DistroInfo) -> b
         }
 
         Command::Validate { paths } => run_lint(&paths, &config),
+    }
+}
+
+/// Handle the `scan` subcommand.
+fn run_scan(
+    output: &OutputFormat,
+    check: Option<&str>,
+    dry_run: bool,
+    ask: bool,
+    config: Config,
+    distro: DistroInfo,
+) -> bool {
+    let all = registry::all_checks(&config);
+    let checks: Vec<_> = match check {
+        Some(id) => all.into_iter().filter(|c| c.id() == id).collect(),
+        None => all,
+    };
+    // Respect enabled/disabled_checks from config
+    let checks: Vec<_> = checks
+        .into_iter()
+        .filter(|c| config.check_enabled(c.id()))
+        .collect();
+
+    if dry_run {
+        print_dry_run(&checks);
+        return false;
+    }
+
+    let runner = match build_runner(&config, ask) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("hah: {e}");
+            return false;
+        }
+    };
+    let ctx = Context::new_with_runner(false, config, distro, runner);
+
+    let results: Vec<_> = checks
+        .iter()
+        .map(|c| (c.id().to_string(), c.run(&ctx)))
+        .collect();
+
+    let fmt = match output {
+        OutputFormat::Terminal => CoreOutputFormat::Terminal,
+        OutputFormat::Json => CoreOutputFormat::Json,
+        OutputFormat::Yaml => CoreOutputFormat::Yaml,
+    };
+
+    output::render(&results, &fmt);
+
+    results
+        .iter()
+        .any(|(_, r)| r.findings.iter().any(|f| f.severity == Severity::Critical))
+}
+
+/// Build a policy-enforcing command runner from the config allowlist.
+fn build_runner(
+    config: &Config,
+    ask: bool,
+) -> Result<Arc<dyn hah_core::runner::CommandRunner>, String> {
+    let allow = policy::compile_allow(&config.command_allow())?;
+    let mode = if ask {
+        ExecMode::Ask
+    } else {
+        ExecMode::Enforce
+    };
+    let approver: Approver = Arc::new(|program: &str, args: &[&str]| {
+        let joined = args.join(" ");
+        policy::confirm(
+            &mut std::io::stdin().lock(),
+            &mut std::io::stderr(),
+            &format!("Run `{program} {joined}`?"),
+        )
+    });
+    Ok(Arc::new(PolicyRunner::new(
+        Arc::new(SystemRunner),
+        allow,
+        mode,
+        approver,
+    )))
+}
+
+/// Print each check and the commands it would run, without executing anything.
+fn print_dry_run(checks: &[Box<dyn hah_core::check::Check>]) {
+    for check in checks {
+        println!("{} — {}", check.id(), check.title());
+        for argv in check.planned_commands() {
+            println!("    $ {}", argv.join(" "));
+        }
     }
 }
 
@@ -220,6 +287,28 @@ mod tests {
     fn run_does_not_panic_with_real_system() {
         // Exercises the Config::load() / DistroInfo::detect() code paths.
         run(parse(&["hah", "scan", "--check", "__no_such_check__"]));
+    }
+
+    #[test]
+    fn scan_dry_run_lists_without_executing() {
+        // Dry-run prints planned commands and never returns Critical.
+        assert!(!run_with_config(
+            parse(&["hah", "scan", "--check", "boot-space", "--dry-run"]),
+            Config::default(),
+            DistroInfo::default(),
+        ));
+    }
+
+    #[test]
+    fn scan_with_invalid_allow_pattern_returns_false() {
+        // A bad allow regex makes build_runner fail; scan reports and returns false.
+        let mut config = Config::default();
+        config.commands.allow = vec!["[".into()];
+        assert!(!run_with_config(
+            parse(&["hah", "scan", "--check", "boot-space"]),
+            config,
+            DistroInfo::default(),
+        ));
     }
 
     #[test]

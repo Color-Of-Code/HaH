@@ -122,7 +122,10 @@ impl Config {
     /// built-in [`DEFAULT_COMMAND_ALLOW`] set when none is configured.
     pub fn command_allow(&self) -> Vec<String> {
         if self.commands.allow.is_empty() {
-            DEFAULT_COMMAND_ALLOW.iter().map(|s| s.to_string()).collect()
+            DEFAULT_COMMAND_ALLOW
+                .iter()
+                .map(ToString::to_string)
+                .collect()
         } else {
             self.commands.allow.clone()
         }
@@ -257,7 +260,7 @@ mod tests {
             Config::default().command_allow(),
             DEFAULT_COMMAND_ALLOW
                 .iter()
-                .map(|s| s.to_string())
+                .map(ToString::to_string)
                 .collect::<Vec<_>>()
         );
     }

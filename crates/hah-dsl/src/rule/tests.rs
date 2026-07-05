@@ -181,7 +181,8 @@ rules:
 "#,
     );
     let mut mock = MockCommandRunner::new();
-    mock.expect_run().returning(|_, _| ok_output("hello\n"));
+    mock.expect_run_stdin()
+        .returning(|_, _, _| ok_output("hello\n"));
     let ctx = Context::new_with_runner(
         false,
         Config::default(),
@@ -217,8 +218,8 @@ rules:
     let avail_bytes = 10 * 1_048_576i64;
     let df_output = format!("Avail\n{avail_bytes}\n");
     let mut mock = MockCommandRunner::new();
-    mock.expect_run()
-        .returning(move |_, _| ok_output(&df_output));
+    mock.expect_run_stdin()
+        .returning(move |_, _, _| ok_output(&df_output));
     let ctx = Context::new_with_runner(
         false,
         Config::default(),
@@ -325,28 +326,126 @@ fn load_checks_from_dir_nonexistent_returns_empty() {
 // ── Trigger error paths ───────────────────────────────────────────────────
 
 #[test]
-fn capability_trigger_sysctl_conflicts_runs_without_error() {
-    // sysctl_conflicts on non-existent path returns an empty list, not an error.
+fn pipeline_trigger_chains_stages_and_stores_result() {
     let check = make_check(
         r#"
 rules:
   - id: x
     title: X
     triggers:
-      - name: conflicts
-        capability:
-          type: sysctl_conflicts
-          paths: ["/nonexistent/sysctl.d"]
+      - name: matches
+        pipeline:
+          - [grep, error]
+        transform: "$stdout | lines | non_empty"
     conditions:
-      - warning: "$conflicts"
+      - warning: "$matches"
+    outcome: { id: x, title: "{matches}", description: "" }
+"#,
+    );
+    let mut mock = MockCommandRunner::new();
+    mock.expect_run_stdin()
+        .returning(|_, _, _| ok_output("error: disk full\n"));
+    let ctx = Context::new_with_runner(
+        false,
+        Config::default(),
+        DistroInfo::default(),
+        std::sync::Arc::new(mock),
+    );
+    let cr = check.run(&ctx);
+    assert!(cr.errors.is_empty(), "unexpected errors: {:?}", cr.errors);
+    assert_eq!(cr.findings.len(), 1);
+}
+
+#[test]
+fn blocked_command_marks_check_skipped() {
+    let check = make_check(
+        r#"
+rules:
+  - id: x
+    title: X
+    triggers:
+      - name: out
+        pipeline:
+          - [rm, -rf]
+    conditions:
+      - warning: "$out"
+    outcome: { id: x, title: "", description: "" }
+"#,
+    );
+    let mut mock = MockCommandRunner::new();
+    mock.expect_run_stdin().returning(|_, _, _| {
+        Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "command not allowed: rm",
+        ))
+    });
+    let ctx = Context::new_with_runner(
+        false,
+        Config::default(),
+        DistroInfo::default(),
+        std::sync::Arc::new(mock),
+    );
+    let cr = check.run(&ctx);
+    assert_eq!(cr.skipped.as_deref(), Some("rm"));
+    assert!(cr.findings.is_empty());
+    assert!(cr.errors.is_empty());
+}
+
+#[test]
+fn pipeline_empty_stage_errors() {
+    let check = make_check(
+        r#"
+rules:
+  - id: x
+    title: X
+    triggers:
+      - name: out
+        pipeline:
+          - []
+    conditions: []
     outcome: { id: x, title: "", description: "" }
 "#,
     );
     let ctx = Context::new(false, Config::default(), DistroInfo::default());
     let cr = check.run(&ctx);
-    // Non-existent path → no conflicts, no errors, no findings.
-    assert!(cr.errors.is_empty());
-    assert!(cr.findings.is_empty());
+    assert!(!cr.errors.is_empty());
+}
+
+#[test]
+fn planned_commands_lists_pipeline_command_and_probe() {
+    let check = make_check(
+        r#"
+rules:
+  - id: x
+    title: X
+    triggers:
+      - name: a
+        command:
+          program: uname
+          args: ["-r"]
+      - name: b
+        pipeline:
+          - [find, /boot]
+          - [grep, img]
+      - name: c
+        probe:
+          type: package_installed
+          name: nginx
+      - name: d
+        probe:
+          type: file_size
+          path: /etc/hosts
+    conditions: []
+    outcome: { id: x, title: "", description: "" }
+"#,
+    );
+    let cmds = check.planned_commands();
+    assert!(cmds.contains(&vec!["uname".to_string(), "-r".to_string()]));
+    assert!(cmds.contains(&vec!["find".to_string(), "/boot".to_string()]));
+    assert!(cmds.contains(&vec!["grep".to_string(), "img".to_string()]));
+    assert!(cmds.iter().any(|c| c[0] == "dpkg-query"));
+    // file_size probe runs no external command
+    assert!(!cmds.iter().any(|c| c[0] == "stat"));
 }
 
 #[test]
@@ -846,8 +945,8 @@ rules:
 "#,
     );
     let mut mock = MockCommandRunner::new();
-    mock.expect_run()
-        .returning(|_, _| ok_output("not_a_number\n"));
+    mock.expect_run_stdin()
+        .returning(|_, _, _| ok_output("not_a_number\n"));
     let ctx = Context::new_with_runner(
         false,
         Config::default(),

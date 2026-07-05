@@ -110,10 +110,10 @@ impl Check for RuleBasedCheck {
             if let Some(stages) = &trigger.pipeline {
                 cmds.extend(stages.iter().cloned());
             }
-            if let Some(probe) = &trigger.probe {
-                if let Some(argv) = probe_command(probe) {
-                    cmds.push(argv);
-                }
+            if let Some(probe) = &trigger.probe
+                && let Some(argv) = probe_command(probe)
+            {
+                cmds.push(argv);
             }
         }
         cmds

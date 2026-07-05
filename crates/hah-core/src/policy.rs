@@ -136,7 +136,7 @@ mod tests {
     }
 
     fn allow(patterns: &[&str]) -> Vec<Regex> {
-        compile_allow(&patterns.iter().map(|s| s.to_string()).collect::<Vec<_>>()).unwrap()
+        compile_allow(&patterns.iter().map(ToString::to_string).collect::<Vec<_>>()).unwrap()
     }
 
     fn deny_approver() -> Approver {
