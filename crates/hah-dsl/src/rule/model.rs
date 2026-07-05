@@ -8,9 +8,6 @@ use serde::{Deserialize, Serialize};
 
 use hah_core::model::Severity;
 
-// Re-export so YAML model and caps_bridge share the same type.
-pub use hah_caps::logs::LogSource;
-
 // ── Reusable building blocks ──────────────────────────────────────────────────
 
 /// Named reusable building blocks defined at the top of a rule file.
@@ -105,13 +102,16 @@ pub struct RuleTrigger {
     pub name: String,
     /// Shell command to run; the raw stdout is the initial value.
     pub command: Option<CommandSpec>,
+    /// Declarative command pipeline: an array of `argv` stages that HaH runs
+    /// in-process, feeding each stage's stdout into the next stage's stdin.
+    /// The final stage's stdout becomes the trigger value.
+    #[serde(default)]
+    pub pipeline: Option<Vec<Vec<String>>>,
     /// Read a file from the filesystem; the file content is the initial value.
     /// Returns `Null` if the file does not exist (rule continues without error).
     pub file: Option<FileSpec>,
     /// Built-in probe (package/service state).
     pub probe: Option<ProbeSpec>,
-    /// Rust-backed capability (complex system analysis).
-    pub capability: Option<CapabilitySpec>,
     /// Optional pipeline expression that transforms the raw trigger output.
     /// Use `$stdout` as the source variable.
     #[serde(default)]

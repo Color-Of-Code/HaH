@@ -44,6 +44,12 @@ pub trait Check: Send + Sync {
     fn id(&self) -> &str;
     fn title(&self) -> &str;
     fn run(&self, ctx: &Context) -> CheckResult;
+
+    /// The external commands this check may run, as `argv` vectors.  Used by
+    /// `--dry-run` to preview what would execute.  Default: none.
+    fn planned_commands(&self) -> Vec<Vec<String>> {
+        Vec::new()
+    }
 }
 
 #[cfg(test)]

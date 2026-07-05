@@ -26,6 +26,10 @@ pub struct Finding {
 pub struct CheckResult {
     pub findings: Vec<Finding>,
     pub errors: Vec<String>,
+    /// Set when the check could not run because a required command was not
+    /// permitted by the execution policy.  Holds the blocked program name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skipped: Option<String>,
 }
 
 impl Remediation {
@@ -78,6 +82,14 @@ impl CheckResult {
         self.errors.push(error.into());
         self
     }
+
+    /// Mark this result as skipped because `program` was blocked by policy.
+    pub fn skipped(program: impl Into<String>) -> Self {
+        Self {
+            skipped: Some(program.into()),
+            ..Self::default()
+        }
+    }
 }
 
 #[cfg(test)]
@@ -126,6 +138,14 @@ mod tests {
         let f = Finding::new("x", "X", "Desc", Severity::Info).with_remediation(r);
         let rem = f.remediation.unwrap();
         assert_eq!(rem.description, "Fix it");
+    }
+
+    #[test]
+    fn check_result_skipped_records_program() {
+        let r = CheckResult::skipped("rm");
+        assert_eq!(r.skipped.as_deref(), Some("rm"));
+        assert!(r.findings.is_empty());
+        assert!(r.errors.is_empty());
     }
 
     #[test]

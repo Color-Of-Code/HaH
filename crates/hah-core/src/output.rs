@@ -42,8 +42,12 @@ fn severity_label(s: &Severity) -> colored::ColoredString {
 fn render_terminal(results: &[(String, CheckResult)]) {
     let total_findings: usize = results.iter().map(|(_, r)| r.findings.len()).sum();
     let total_errors: usize = results.iter().map(|(_, r)| r.errors.len()).sum();
+    let skipped: Vec<&str> = results
+        .iter()
+        .filter_map(|(_, r)| r.skipped.as_deref())
+        .collect();
 
-    if total_findings == 0 && total_errors == 0 {
+    if total_findings == 0 && total_errors == 0 && skipped.is_empty() {
         println!("{}", "No issues found.".green().bold());
         return;
     }
@@ -61,7 +65,21 @@ fn render_terminal(results: &[(String, CheckResult)]) {
         }
     }
 
-    println!("\n{} finding(s), {} error(s)", total_findings, total_errors);
+    for (check_id, result) in results {
+        if let Some(program) = &result.skipped {
+            eprintln!(
+                "  {} {check_id}: blocked command '{program}' (not in allowlist)",
+                "SKIPPED".yellow()
+            );
+        }
+    }
+
+    println!(
+        "\n{} finding(s), {} error(s), {} skipped",
+        total_findings,
+        total_errors,
+        skipped.len()
+    );
 }
 
 fn render_finding(f: &Finding) {
@@ -185,6 +203,12 @@ mod tests {
     fn render_terminal_with_errors() {
         let result = CheckResult::default().with_error("something went wrong");
         let results = vec![("check-a".into(), result)];
+        render(&results, &OutputFormat::Terminal);
+    }
+
+    #[test]
+    fn render_terminal_with_skipped_check() {
+        let results = vec![("check-a".into(), CheckResult::skipped("rm"))];
         render(&results, &OutputFormat::Terminal);
     }
 

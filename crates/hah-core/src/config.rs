@@ -22,7 +22,37 @@ pub struct Config {
     /// Extra directories to search for `*.yaml` rule files.
     #[serde(default)]
     pub rule_dirs: Vec<PathBuf>,
+    /// Command execution policy (allowlist of programs rules may run).
+    #[serde(default)]
+    pub commands: CommandPolicy,
 }
+
+/// Command execution policy.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CommandPolicy {
+    /// Regexes matched against the program name of every command a rule runs.
+    /// When empty, the built-in [`DEFAULT_COMMAND_ALLOW`] set is used.
+    #[serde(default)]
+    pub allow: Vec<String>,
+}
+
+/// Programs the shipped rules need.  Used when no allowlist is configured.
+pub const DEFAULT_COMMAND_ALLOW: &[&str] = &[
+    "^apt-get$",
+    "^df$",
+    "^dkms$",
+    "^dmesg$",
+    "^dpkg$",
+    "^dpkg-query$",
+    "^find$",
+    "^grep$",
+    "^journalctl$",
+    "^ls$",
+    "^snap$",
+    "^systemctl$",
+    "^tail$",
+    "^uname$",
+];
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Allowlist {
@@ -85,6 +115,17 @@ impl Config {
         self.thresholds.extend(other.thresholds);
         self.preferred_snap.extend(other.preferred_snap);
         self.rule_dirs.extend(other.rule_dirs);
+        self.commands.allow.extend(other.commands.allow);
+    }
+
+    /// Return the effective command allow patterns: the configured list, or the
+    /// built-in [`DEFAULT_COMMAND_ALLOW`] set when none is configured.
+    pub fn command_allow(&self) -> Vec<String> {
+        if self.commands.allow.is_empty() {
+            DEFAULT_COMMAND_ALLOW.iter().map(|s| s.to_string()).collect()
+        } else {
+            self.commands.allow.clone()
+        }
     }
 
     /// Return a threshold value from config, falling back to `default` if not set.
@@ -208,6 +249,41 @@ mod tests {
         base.merge(other);
         assert_eq!(base.allowlist.repositories.len(), 2);
         assert_eq!(base.preferred_snap.len(), 2);
+    }
+
+    #[test]
+    fn command_allow_defaults_when_unset() {
+        assert_eq!(
+            Config::default().command_allow(),
+            DEFAULT_COMMAND_ALLOW
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn command_allow_uses_configured_patterns() {
+        let mut cfg = Config::default();
+        cfg.commands.allow = vec!["^find$".into()];
+        assert_eq!(cfg.command_allow(), vec!["^find$".to_string()]);
+    }
+
+    #[test]
+    fn merge_extends_command_allow() {
+        let mut base = Config::default();
+        base.commands.allow = vec!["^find$".into()];
+        let mut other = Config::default();
+        other.commands.allow = vec!["^grep$".into()];
+        base.merge(other);
+        assert_eq!(base.commands.allow.len(), 2);
+    }
+
+    #[test]
+    fn config_deserializes_commands_allow() {
+        let yaml = "commands:\n  allow:\n    - '^find$'\n    - '^grep$'\n";
+        let cfg: Config = hah_utils::yaml::parse(yaml).unwrap();
+        assert_eq!(cfg.commands.allow, vec!["^find$", "^grep$"]);
     }
 
     // ── serde deserialization ─────────────────────────────────────────────────
