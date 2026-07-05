@@ -135,6 +135,8 @@ pub enum Filter {
     RejectIn(Vec<String>),
     Grep(String),
     RejectGrep(String),
+    Conflicts,
+    ToBytes,
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────

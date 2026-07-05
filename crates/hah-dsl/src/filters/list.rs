@@ -222,6 +222,55 @@ pub fn reject_grep(value: RuleValue, pattern: &str) -> Result<RuleValue> {
     }
 }
 
+/// Detect configuration-key conflicts across files from `grep -rH` output.
+///
+/// Each input item is expected in the form `<file>:<key> = <value>` (as emitted
+/// by `grep -rH`).  Comment lines (content starting with `#` or `;`) are
+/// ignored.  Returns one `"<key>: <fileA>=<valA>, <fileB>=<valB>"` string per
+/// key that is assigned at least two *different* values, sorted by key.
+pub fn conflicts(value: RuleValue) -> Result<RuleValue> {
+    match value {
+        RuleValue::List(v) => {
+            let mut seen: HashMap<String, Vec<(String, String)>> = HashMap::new();
+            for item in &v {
+                let line = item.display();
+                let Some((file, rest)) = line.split_once(':') else {
+                    continue;
+                };
+                let content = rest.trim();
+                if content.is_empty() || content.starts_with('#') || content.starts_with(';') {
+                    continue;
+                }
+                if let Some((key, val)) = content.split_once('=') {
+                    seen.entry(key.trim().to_string())
+                        .or_default()
+                        .push((file.trim().to_string(), val.trim().to_string()));
+                }
+            }
+            let mut keys: Vec<&String> = seen.keys().collect();
+            keys.sort();
+            let mut out = Vec::new();
+            for key in keys {
+                let occ = &seen[key];
+                if occ.len() < 2 {
+                    continue;
+                }
+                let first = &occ[0].1;
+                if occ.iter().any(|(_, v)| v != first) {
+                    let detail = occ
+                        .iter()
+                        .map(|(f, val)| format!("{f}={val}"))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    out.push(RuleValue::Str(format!("{key}: {detail}")));
+                }
+            }
+            Ok(RuleValue::List(out))
+        }
+        other => Err(anyhow!("conflicts: expected a list, got {:?}", other)),
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -478,5 +527,46 @@ mod tests {
     #[test]
     fn reject_grep_invalid_pattern_errors() {
         assert!(reject_grep(list(&["x"]), "[invalid").is_err());
+    }
+
+    #[test]
+    fn conflicts_detects_differing_values() {
+        let input = list(&[
+            "/etc/sysctl.d/a.conf:net.ipv4.ip_forward = 0",
+            "/etc/sysctl.d/b.conf:net.ipv4.ip_forward = 1",
+        ]);
+        let result = conflicts(input).unwrap();
+        assert_eq!(
+            result,
+            list(&[
+                "net.ipv4.ip_forward: /etc/sysctl.d/a.conf=0, /etc/sysctl.d/b.conf=1"
+            ])
+        );
+    }
+
+    #[test]
+    fn conflicts_ignores_same_value_and_singletons() {
+        let input = list(&[
+            "/etc/sysctl.d/a.conf:vm.swappiness = 10",
+            "/etc/sysctl.d/b.conf:vm.swappiness = 10",
+            "/etc/sysctl.d/c.conf:kernel.panic = 5",
+        ]);
+        assert_eq!(conflicts(input).unwrap(), RuleValue::List(vec![]));
+    }
+
+    #[test]
+    fn conflicts_skips_comments_and_malformed_lines() {
+        let input = list(&[
+            "/etc/sysctl.d/a.conf:# net.ipv4.ip_forward = 0",
+            "/etc/sysctl.d/a.conf:; commented",
+            "no-colon-line",
+            "/etc/sysctl.d/a.conf:no-equals-here",
+        ]);
+        assert_eq!(conflicts(input).unwrap(), RuleValue::List(vec![]));
+    }
+
+    #[test]
+    fn conflicts_err_on_non_list() {
+        assert!(conflicts(sv("x")).is_err());
     }
 }

@@ -34,6 +34,7 @@ impl Filter {
             Filter::Join(s) => Ok(list::join(value, s)),
             Filter::Last => Ok(list::last(value)),
             Filter::GroupCount(n) => Ok(list::group_count(value, *n)),
+            Filter::Conflicts => Ok(list::conflicts(value)),
             _ => Err(value),
         }
     }
@@ -70,6 +71,7 @@ impl Filter {
         match self {
             Filter::Number => Ok(scalar::number(value)),
             Filter::BytesToMb => Ok(scalar::bytes_to_mb(value)),
+            Filter::ToBytes => Ok(scalar::to_bytes(value)),
             Filter::Default(s) => Ok(scalar::default_val(value, s.clone())),
             _ => Err(value),
         }

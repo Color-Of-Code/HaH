@@ -55,6 +55,8 @@ impl Filter {
             "sort" => Sort,
             "unique" => Unique,
             "bytes_to_mb" => BytesToMb,
+            "to_bytes" => ToBytes,
+            "conflicts" => Conflicts,
         )
     }
 
