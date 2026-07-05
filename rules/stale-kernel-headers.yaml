@@ -22,7 +22,7 @@ rules:
         transform: "$stdout | lines | non_empty"
 
     values:
-      bootable_header_packages: "$bootloader_config | grep('vmlinuz-[^ ]+') | prefix_strip('vmlinuz-') | prefix_strip('linux-image-') | default('') | grep('^[0-9]') | sort"
+      bootable_header_packages: "$bootloader_config | grep('vmlinuz-[^ ]+') | prefix_strip('vmlinuz-') | prefix_add('linux-headers-') | sort"
       stale_headers: "$headers | reject_in($bootable_header_packages) | reject_contains($running) | sort"
       stale_versions: "$stale_headers | prefix_strip('linux-headers-')"
       stale_count: "$stale_versions | count"

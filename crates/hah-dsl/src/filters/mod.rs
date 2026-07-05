@@ -59,6 +59,7 @@ impl Filter {
             Filter::Lines => Ok(string::lines(value)),
             Filter::Field(n) => Ok(string::field(value, *n)),
             Filter::PrefixStrip(s) => Ok(string::prefix_strip(value, s)),
+            Filter::PrefixAdd(s) => Ok(string::prefix_add(value, s)),
             Filter::StartsWith(s) => Ok(string::starts_with(value, s)),
             Filter::Contains(s) => Ok(string::contains(&value, s)),
             Filter::RejectContains(s) => Ok(string::reject_contains(value, s)),

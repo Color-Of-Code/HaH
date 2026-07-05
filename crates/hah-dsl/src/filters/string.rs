@@ -79,6 +79,15 @@ pub fn prefix_strip(value: RuleValue, prefix: &str) -> Result<RuleValue> {
     }
 }
 
+pub fn prefix_add(value: RuleValue, prefix: &str) -> Result<RuleValue> {
+    match value {
+        RuleValue::Null => Ok(RuleValue::Null),
+        other => map_string_or_list(other, "prefix_add", |s| {
+            RuleValue::Str(format!("{prefix}{s}"))
+        }),
+    }
+}
+
 pub fn starts_with(value: RuleValue, prefix: &str) -> Result<RuleValue> {
     match value {
         RuleValue::List(_) => {
@@ -205,6 +214,22 @@ mod tests {
         assert_eq!(
             prefix_strip(list(&["linux-1", "other"]), "linux-").unwrap(),
             list(&["1", "other"])
+        );
+    }
+
+    #[test]
+    fn prefix_add_str() {
+        assert_eq!(
+            prefix_add(sv("5.15"), "linux-image-").unwrap(),
+            sv("linux-image-5.15")
+        );
+    }
+
+    #[test]
+    fn prefix_add_list() {
+        assert_eq!(
+            prefix_add(list(&["1", "2"]), "linux-image-").unwrap(),
+            list(&["linux-image-1", "linux-image-2"])
         );
     }
 

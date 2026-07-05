@@ -22,7 +22,7 @@ rules:
         transform: "$stdout | lines | non_empty"
 
     values:
-      bootable_kernels: "$bootloader_config | grep('vmlinuz-[^ ]+') | prefix_strip('vmlinuz-') | prefix_strip('linux-image-') | default('') | grep('^[0-9]') | sort"
+      bootable_kernels: "$bootloader_config | grep('vmlinuz-[^ ]+') | prefix_strip('vmlinuz-') | prefix_add('linux-image-') | sort"
       unused_kernels: "$installed | reject_in($bootable_kernels) | reject_contains($running) | sort"
       unused_count: "$unused_kernels | count"
       unused_list: "$unused_kernels | join(', ')"

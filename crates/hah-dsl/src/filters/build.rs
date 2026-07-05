@@ -99,6 +99,7 @@ impl Filter {
     fn str_arg(name: &str, args: &[RuleValue]) -> Result<Option<Self>> {
         unary_arg_filters!(name, Self::require_str_arg(name, args)?.to_string();
             "prefix_strip" => PrefixStrip,
+            "prefix_add" => PrefixAdd,
             "starts_with" => StartsWith,
             "contains" => Contains,
             "reject_contains" => RejectContains,

@@ -134,6 +134,7 @@ pub enum Filter {
     Field(usize),
     Number,
     PrefixStrip(String),
+    PrefixAdd(String),
     StartsWith(String),
     Contains(String),
     RejectContains(String),

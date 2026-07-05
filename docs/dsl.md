@@ -161,6 +161,7 @@ condition operands.
 | `to_bytes` | Parse a human size (`600.0M`, `1.5G`, `512K`) into an integer byte count |
 | `field(n)` | Take the _n_-th whitespace-separated field from a string |
 | `prefix_strip(p)` | Remove a leading prefix _p_ from each string in a list |
+| `prefix_add(p)` | Add prefix _p_ to each string in a list or string |
 | `starts_with(p)` | Keep only list items that start with _p_ |
 | `contains(v)` | Check whether a string or list contains substring _v_ (returns `Bool`) |
 | `icontains(v)` | Case-insensitive version of `contains`; on a list, keeps matching items |
@@ -181,6 +182,8 @@ condition operands.
 
 Patterns for `grep` and `reject_grep` are Rust regular expressions. Use `(?i)` for
 case-insensitive matching. Applied to a bare `Str`, both filters return a list:
+
+`prefix_add(p)` is handy when you need to turn a bare version string into a package name, for example `"5.15" | prefix_add('linux-image-')` becomes `"linux-image-5.15"`.
 
 ```yaml
 values:
