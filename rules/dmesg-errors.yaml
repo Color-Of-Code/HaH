@@ -1,0 +1,41 @@
+rules:
+  - id: dmesg-errors
+    title: Kernel ring buffer errors and warnings
+    only_if:
+      require_commands: [dmesg]
+    triggers:
+      - name: dmesg_critical
+        capability:
+          type: log_scan
+          source:
+            command: [dmesg, --level=emerg,alert,crit,err]
+          patterns:
+            - '(?i)\b(fatal|bug:|oops|panic|call trace|kernel BUG)\b'
+            - '(?i)\berror\b'
+      - name: dmesg_warnings
+        capability:
+          type: log_scan
+          source:
+            command: [dmesg, --level=warn]
+          patterns:
+            - '(?i)\bwarn(ing)?\b'
+    values:
+      critical_count: "$dmesg_critical | count"
+      warning_count: "$dmesg_warnings | count"
+      critical_sample: "$dmesg_critical | first"
+      warning_sample: "$dmesg_warnings | first"
+    conditions:
+      - critical: "$dmesg_critical"
+      - warning: "$dmesg_warnings"
+    outcome:
+      id: dmesg-errors
+      title: "Kernel ring buffer: {critical_count} critical, {warning_count} warning message(s)"
+      description: >
+        The kernel ring buffer contains messages that may indicate hardware or
+        driver problems.
+        First critical: {critical_sample}
+        First warning: {warning_sample}
+      remediation:
+        description: "Inspect the full kernel ring buffer."
+        commands:
+          - "dmesg --level=emerg,alert,crit,err,warn"

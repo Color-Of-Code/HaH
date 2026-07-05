@@ -1,0 +1,42 @@
+rules:
+  - id: kernel-log-errors
+    title: Errors and warnings in kernel log
+    only_if:
+      require_files: [/var/log/kern.log]
+    triggers:
+      - name: kern_critical
+        capability:
+          type: log_scan
+          source:
+            file: /var/log/kern.log
+            last_bytes: 524288    # scan last 512 KB
+          patterns:
+            - '(?i)\b(fatal|panic|oops|bug:|call trace)\b'
+            - ' (crit|emerg|alert|err): '
+      - name: kern_warnings
+        capability:
+          type: log_scan
+          source:
+            file: /var/log/kern.log
+            last_bytes: 524288
+          patterns:
+            - ' warn(ing)?: '
+            - '(?i)\bwarn(ing)?\b'
+    values:
+      critical_count: "$kern_critical | count"
+      warning_count: "$kern_warnings | count"
+      critical_sample: "$kern_critical | first"
+    conditions:
+      - critical: "$kern_critical"
+      - warning: "$kern_warnings"
+    outcome:
+      id: kernel-log-errors
+      title: "Kernel log: {critical_count} critical, {warning_count} warning message(s)"
+      description: >
+        Recent kernel log entries (last 512 KB) contain messages at critical or
+        warning severity that may indicate hardware or driver issues.
+        First critical entry: {critical_sample}
+      remediation:
+        description: "Review recent kernel log entries."
+        commands:
+          - "grep -iE '(fatal|panic|oops|bug:|call trace|crit|emerg|alert|err|warn)' /var/log/kern.log | tail -50"

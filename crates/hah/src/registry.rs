@@ -55,8 +55,8 @@ mod tests {
     #[test]
     fn all_checks_returns_expected_count() {
         let checks = all_checks(&Config::default());
-        // 14 compiled + 10 rules from ./rules/ (legacy-ntp.yaml has 2 rules)
-        assert_eq!(checks.len(), 24);
+        // 14 compiled + 13 rules from ./rules/ (legacy-ntp.yaml has 2 rules)
+        assert_eq!(checks.len(), 27);
     }
 
     #[test]

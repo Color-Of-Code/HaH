@@ -21,6 +21,7 @@ pub mod files;
 pub mod initramfs;
 pub mod journal;
 pub mod kernel;
+pub mod logs;
 pub mod network;
 pub mod sysctl;
 

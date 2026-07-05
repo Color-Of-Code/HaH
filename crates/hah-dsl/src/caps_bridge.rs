@@ -43,6 +43,9 @@ pub fn dispatch(spec: &CapabilitySpec, ctx: &Context) -> Result<RuleValue> {
         CapabilitySpec::InstalledDenylist => {
             hah_caps::apt::installed_denylist(runner, &ctx.config.denylist.packages)
         }
+        CapabilitySpec::LogScan { source, patterns } => {
+            hah_caps::logs::log_scan(source, patterns, runner)
+        }
     };
     Ok(convert(result?))
 }

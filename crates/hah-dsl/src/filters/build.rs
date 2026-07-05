@@ -101,6 +101,8 @@ impl Filter {
             "icontains" => IContains,
             "join" => Join,
             "default" => Default,
+            "grep" => Grep,
+            "reject_grep" => RejectGrep,
         )
     }
 

@@ -1,0 +1,42 @@
+rules:
+  - id: syslog-errors
+    title: Critical errors in syslog
+    only_if:
+      require_files: [/var/log/syslog]
+    triggers:
+      - name: syslog_critical
+        capability:
+          type: log_scan
+          source:
+            file: /var/log/syslog
+            last_bytes: 1048576   # scan last 1 MB
+          patterns:
+            - '(?i)\b(fatal|critical|emerg|alert)\b'
+            - ' (crit|emerg|alert): '
+      - name: syslog_errors
+        capability:
+          type: log_scan
+          source:
+            file: /var/log/syslog
+            last_bytes: 1048576
+          patterns:
+            - ' (err|error): '
+            - '(?i)\berror\b'
+    values:
+      critical_count: "$syslog_critical | count"
+      error_count: "$syslog_errors | count"
+      critical_sample: "$syslog_critical | first"
+    conditions:
+      - critical: "$syslog_critical"
+      - warning: "$syslog_errors"
+    outcome:
+      id: syslog-errors
+      title: "Syslog: {critical_count} critical, {error_count} error message(s)"
+      description: >
+        Recent syslog entries (last 1 MB) contain messages at critical or error
+        severity.
+        First critical entry: {critical_sample}
+      remediation:
+        description: "Review recent syslog entries."
+        commands:
+          - "grep -iE '(fatal|critical|emerg|alert|error)' /var/log/syslog | tail -50"

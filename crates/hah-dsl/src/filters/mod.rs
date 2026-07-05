@@ -12,13 +12,17 @@ pub fn apply(value: RuleValue, filter: &Filter) -> Result<RuleValue> {
 
 impl Filter {
     pub fn apply(&self, value: RuleValue) -> Result<RuleValue> {
-        self.apply_list(value)
+        self.apply_list_basic(value)
+            .or_else(|value| self.apply_list_pattern(value))
             .or_else(|value| self.apply_string(value))
             .or_else(|value| self.apply_scalar(value))
             .unwrap_or_else(|_| unreachable!("all Filter variants are handled"))
     }
 
-    fn apply_list(&self, value: RuleValue) -> std::result::Result<Result<RuleValue>, RuleValue> {
+    fn apply_list_basic(
+        &self,
+        value: RuleValue,
+    ) -> std::result::Result<Result<RuleValue>, RuleValue> {
         match self {
             Filter::NonEmpty => Ok(list::non_empty(value)),
             Filter::Skip(n) => Ok(list::skip(value, *n)),
@@ -30,9 +34,20 @@ impl Filter {
             Filter::Join(s) => Ok(list::join(value, s)),
             Filter::Last => Ok(list::last(value)),
             Filter::GroupCount(n) => Ok(list::group_count(value, *n)),
+            _ => Err(value),
+        }
+    }
+
+    fn apply_list_pattern(
+        &self,
+        value: RuleValue,
+    ) -> std::result::Result<Result<RuleValue>, RuleValue> {
+        match self {
             Filter::WhereGt(threshold) => Ok(list::where_gt(value, *threshold)),
             Filter::Intersect(other) => Ok(list::intersect(value, other)),
             Filter::RejectIn(other) => Ok(list::reject_in(value, other)),
+            Filter::Grep(p) => Ok(list::grep(value, p)),
+            Filter::RejectGrep(p) => Ok(list::reject_grep(value, p)),
             _ => Err(value),
         }
     }

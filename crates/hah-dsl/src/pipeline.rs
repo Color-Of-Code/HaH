@@ -133,6 +133,8 @@ pub enum Filter {
     WhereGt(i64),
     Intersect(Vec<String>),
     RejectIn(Vec<String>),
+    Grep(String),
+    RejectGrep(String),
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────

@@ -8,6 +8,9 @@ use serde::{Deserialize, Serialize};
 
 use hah_core::model::Severity;
 
+// Re-export so YAML model and caps_bridge share the same type.
+pub use hah_caps::logs::LogSource;
+
 // ── Reusable building blocks ──────────────────────────────────────────────────
 
 /// Named reusable building blocks defined at the top of a rule file.
@@ -178,6 +181,12 @@ pub enum CapabilitySpec {
     LegacyAptSources,
     LegacyNetworkInterfaces,
     InstalledDenylist,
+    /// Scan log lines from a file or command, filtered by regex patterns.
+    LogScan {
+        source: LogSource,
+        #[serde(default)]
+        patterns: Vec<String>,
+    },
 }
 
 fn default_initramfs_threshold() -> u64 {

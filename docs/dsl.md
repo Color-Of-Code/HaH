@@ -121,6 +121,45 @@ Available capabilities:
 | `legacy_apt_sources` | `List(paths)` | Files using legacy one-line `deb` format |
 | `legacy_network_interfaces` | `Str(status)` | `/etc/network/interfaces` overlap state |
 | `installed_denylist` | `List(entries)` | Installed packages matching the config denylist |
+| `log_scan` | `List(lines)` | Lines from a file or command that match any of the given regex patterns |
+
+#### `log_scan` sources
+
+`log_scan` requires a `source:` block that selects how to obtain log lines:
+
+```yaml
+# Read from a file.  Use `last_bytes` to tail large files.
+triggers:
+  - name: syslog_errors
+    capability:
+      type: log_scan
+      source:
+        file: /var/log/syslog
+        last_bytes: 1048576   # optional: only read the last 1 MB
+      patterns:
+        - '(?i)\bfatal\b'
+        - '(?i)\bcritical\b'
+
+# Run a command and scan its stdout.
+  - name: dmesg_errors
+    capability:
+      type: log_scan
+      source:
+        command: [dmesg, --level=emerg,alert,crit,err]
+      patterns:
+        - '(?i)\berror\b'
+```
+
+Both source types accept a `patterns:` list of Rust regular expressions.
+Empty `patterns` returns **all** lines.  Pair two `log_scan` triggers with
+different patterns and different condition severities to separate critical and
+warning findings entirely in YAML (no Rust changes needed):
+
+```yaml
+conditions:
+  - critical: "$dmesg_critical"
+  - warning:  "$dmesg_warnings"
+```
 
 ---
 
@@ -163,6 +202,17 @@ condition operands.
 | `where_gt(n)` | Keep only items whose first field (parsed as int) exceeds _n_ |
 | `intersect($var)` | Set intersection: keep only items whose value appears in the list variable _$var_ |
 | `reject_in($var)` | Set subtraction: remove items whose value appears in the list variable _$var_ |
+| `grep(pattern)` | Keep list items (or a string) whose text matches the regex _pattern_ |
+| `reject_grep(pattern)` | Remove list items (or a string) whose text matches the regex _pattern_ |
+
+Patterns for `grep` and `reject_grep` are Rust regular expressions. Use `(?i)` for
+case-insensitive matching. Applied to a bare `Str`, both filters return a list:
+
+```yaml
+values:
+  errors: "$dmesg_out | lines | grep('(?i)\\berror\\b')"
+  clean:  "$lines | reject_grep('^#')"   # strip comment lines
+```
 
 ---
 
@@ -365,6 +415,9 @@ See [`rules/`](../rules/) for the default rule set shipped with HaH:
 | `apt-key.yaml` | `file_size` probe, `numeric_threshold` |
 | `dpkg-state.yaml` | Simple command + `non_empty` condition |
 | `legacy-dhcp-client.yaml` | Multi-probe, `all`/`any` nested conditions |
+| `dmesg-errors.yaml` | `log_scan` with command source, two-severity pattern split |
+| `syslog-errors.yaml` | `log_scan` with file source, `last_bytes` tail |
+| `kernel-log-errors.yaml` | `log_scan` file source, `require_files` guard |
 
 ---
 

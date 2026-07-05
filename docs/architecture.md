@@ -8,7 +8,7 @@ HaH is a Cargo workspace with four library crates and one binary:
 hah          (binary)   CLI entry point, check registry, argument parsing
 hah-core     (library)  Data model, Check trait, Config, output renderers, distro detection
 hah-dsl      (library)  YAML rule engine: pipeline evaluator, rule loader
-hah-caps     (library)  Capability implementations: system queries (apt, files, kernel, …)
+hah-caps     (library)  Capability implementations: system queries (apt, files, kernel, logs, …)
 hah-utils    (library)  Low-level shared utilities and library facades
 ```
 
@@ -67,9 +67,14 @@ language reference.
 
 For complex data-gathering logic, add a capability function in the `hah-caps`
 crate (one file per module, e.g. `crates/hah-caps/src/kernel.rs`), register a
-`CapabilitySpec` variant in `hah-dsl/src/rule.rs`, wire it in
+`CapabilitySpec` variant in `hah-dsl/src/rule/model.rs`, wire it in
 `hah-dsl/src/caps_bridge.rs`, and reference it from the YAML rule via
 `capability: { type: my_capability }`.
+
+If the capability needs a structured sub-type that is also deserialized from YAML
+(like `LogSource` for `log_scan`), define the type in `hah-caps` and re-export it
+from there so `hah-dsl` can use it without duplication — `hah-dsl` already depends
+on `hah-caps`.
 
 ---
 
