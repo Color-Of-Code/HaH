@@ -12,11 +12,11 @@ mock = ["dep:mockall"]
 
 [dependencies]
 hah-utils = { path = "../hah-utils" }
-anyhow = "1"
-colored = "2"
+anyhow = "1.0.104"
+colored = "2.2.0"
 mockall = { workspace = true, optional = true }
-regex = "1"
-serde = { version = "1", features = ["derive"] }
+regex = "1.13.1"
+serde = { version = "1.0.229", features = ["derive"] }
 
 [dev-dependencies]
 mockall = { workspace = true }

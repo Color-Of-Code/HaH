@@ -11,7 +11,7 @@ resolver = "2"
 rust-version = "1.99"
 
 [workspace.dependencies]
-mockall = "0.13"
+mockall = "0.13.1"
 
 [workspace.lints.clippy]
 # ── Functional iterator / combinator style ──────────────────────────────────
