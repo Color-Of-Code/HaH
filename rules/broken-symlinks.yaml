@@ -22,6 +22,6 @@ rules:
         The following symlinks point to non-existent targets: {broken_list}.
         Broken symlinks can hide misconfigured packages or removed services.
       remediation:
-        description: "Remove each broken symlink after verifying it is no longer needed."
+        description: "After verifying a link is broken and no longer needed, replace the placeholder with that link's path and run the command once per link."
         commands:
-          - "sudo find /etc /usr/lib /var/lib -xtype l -delete"
+          - 'sudo rm -- "/path/to/confirmed-broken-symlink"'
